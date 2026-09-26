@@ -1,0 +1,12 @@
+{
+  "version": "1.2.9",
+  "download_url": "https://github.com/khmernes1-wq/AI_Dubber_Ultimate/releases/download/v1.2.9/AI_Dubber_Ultimate_v1.2.9.exe",
+  "release_notes": "🚀 Update ថ្មី Version 1.2.9 មានអ្វីខ្លះ?\n✅ Auto Install GPU ដំណើរការស្វ័យប្រវត្ត (FunASR + Demucs + VoxCPM2 CUDA)\n✅ Auto detect NVIDIA GPU → ជ្រើស CUDA version ត្រឹមត្រូវ (cu128/cu126/cu118)\n✅ Setup All-in-One: ចុចម្ដងដំឡើងទាំង FunASR, Demucs, VoxCPM2 GPU ក្នុង dialog\n✅ Progress bar track ទាំង 3 phase នៃការដំឡើង\n✅ Fix duplicate worker bug ក្នុង install dialog",
+  "release_date": "2026-07-04",
+  "minimum_version": "1.0.0",
+  "file_size_mb": 250,
+  "instructions": {
+    "khmer": "Version 1.2.9 - GPU Auto Install សម្រាប់ FunASR + Demucs + VoxCPM2 🚀",
+    "note": "Upload file នេះទៅ GitHub repository"
+  }
+}

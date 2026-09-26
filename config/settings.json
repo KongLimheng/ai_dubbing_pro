@@ -1,0 +1,15 @@
+{
+  "male_model": "sheakmeng3.pth",
+  "female_model": "Female.pth",
+  "boy_model": "Female.pth",
+  "girl_model": "Female.pth",
+  "old_man_model": "Female.pth",
+  "old_woman_model": "Female.pth",
+  "last_srt_path": "C:/Users/sheak/Desktop\\IMG_4708_detected.srt",
+  "window_geometry": {
+    "x": 314,
+    "y": 29,
+    "width": 1000,
+    "height": 933
+  }
+}

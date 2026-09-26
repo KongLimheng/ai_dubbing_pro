@@ -1,0 +1,41 @@
+# AI Dubber Ultimate - Cross-Platform Dependencies
+
+# Core GUI & Display
+PyQt5>=5.15.9
+qtawesome>=1.3.0
+Pillow>=10.0.0
+
+# Video & Media Processing
+opencv-python-headless>=4.8.0
+numpy>=1.24.0
+soundfile>=0.12.1
+pydub>=0.25.1
+
+# Speech Recognition & Translation & Cloud TTS
+edge-tts>=6.1.9
+deep-translator>=1.11.4
+google-generativeai>=0.8.0
+requests>=2.31.0
+aiohttp>=3.8.5
+tqdm>=4.66.0
+
+# Video Downloaders (DramaBox, ReelShort, YouTube, Facebook, TikTok)
+yt-dlp>=2024.03.10
+
+# System Utilities
+psutil>=5.9.5
+huggingface-hub>=0.20.0
+pydantic>=2.0.0
+inflect>=7.0.0
+wetext>=0.1.8
+
+# Windows-only extras (automatically ignored on Linux / macOS)
+pywin32>=306; sys_platform == 'win32'
+
+# Optional Heavy AI Engines (Uncomment if you want local Demucs / Torch pre-installed):
+# torch>=2.0.0
+# torchaudio>=2.0.0
+demucs>=4.0.0
+
+# agy --conversation=14bfe2e3-4eea-4bd9-8f8b-dae1f8ca1942
+#agy --conversation=0b9ccf64-c946-4fb5-a778-071c46533ecb

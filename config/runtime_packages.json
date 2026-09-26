@@ -1,0 +1,22 @@
+{
+  "packages": {
+    "ai_runtime": {
+      "label": "AI Runtime (Python + FunASR + Demucs)",
+      "archive_name": "ai_runtime.zip",
+      "local_path": "runtime_packages/ai_runtime.zip",
+      "url": ""
+    },
+    "funasr_models": {
+      "label": "FunASR Models",
+      "archive_name": "funasr_models.zip",
+      "local_path": "runtime_packages/funasr_models.zip",
+      "url": ""
+    },
+    "demucs_models": {
+      "label": "Demucs Models",
+      "archive_name": "demucs_models.zip",
+      "local_path": "runtime_packages/demucs_models.zip",
+      "url": ""
+    }
+  }
+}

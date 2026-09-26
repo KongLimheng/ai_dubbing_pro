@@ -1,0 +1,30 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments & executables
+.venv/
+AI_Dubber_Ultimate_v1.2.9.exe
+*.dll
+*.log
+*.bat
+*.exe
+
+# App Locks & Temporary Folders
+app_session_*.lock
+VoxCPM-main/
+_internal/
+AI_Dubber_Ultimate_v1.2.9.exe_extracted/
+temp_audio/
+scratch/
+test_*.py
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+demucs_repo
+models
