@@ -174,22 +174,22 @@ def get_voxcpm_install_status(*args, **kwargs):
     has_model = bool(model_path and os.path.exists(os.path.join(model_path, "config.json")))
     has_python = bool(python_exe and os.path.exists(python_exe))
 
-    # Check for required python dependency (pydantic) in the target python
+    # Check for required python dependencies in the target python
     has_deps = True
+    deps_err = ""
     if has_python:
         try:
-            import importlib.util
-            if os.path.abspath(python_exe) == os.path.abspath(sys.executable):
-                has_deps = importlib.util.find_spec("pydantic") is not None
-            else:
-                chk = subprocess.run(
-                    [python_exe, "-c", "import pydantic"],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    timeout=3
-                )
-                has_deps = (chk.returncode == 0)
-        except Exception:
+            chk = subprocess.run(
+                [python_exe, "-c", "import pydantic, torch, torchaudio"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=8
+            )
+            has_deps = (chk.returncode == 0)
+            if not has_deps:
+                deps_err = (chk.stderr or chk.stdout or "").strip()
+        except Exception as e:
             has_deps = True
 
     ready = has_source and has_model and has_python and has_deps
@@ -207,7 +207,8 @@ def get_voxcpm_install_status(*args, **kwargs):
         if not has_python:
             missing.append("Python runtime")
         elif not has_deps:
-            missing.append("pydantic (run auto-install or pip install pydantic)")
+            err_summary = deps_err.splitlines()[-1] if deps_err else "PyTorch/TorchAudio incompatibility"
+            missing.append(f"runtime dependencies ({err_summary[:80]})")
         message = f"VoxCPM2 is incomplete. Missing: {', '.join(missing)}."
         status_str = "incomplete"
     else:

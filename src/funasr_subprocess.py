@@ -68,8 +68,10 @@ def main() -> int:
         vad_max_single_segment_ms = 30000
     vad_max_single_segment_ms = max(1000, vad_max_single_segment_ms)
 
-    vad_enabled = str(args.vad).strip().lower() not in {"0", "false", "no", "off"}
-    punc_enabled = str(args.punc).strip().lower() not in {"0", "false", "no", "off"}
+    vad_enabled = str(args.vad).strip().lower() not in {
+        "0", "false", "no", "off"}
+    punc_enabled = str(args.punc).strip().lower() not in {
+        "0", "false", "no", "off"}
 
     # Resolve device 'auto' to 'cuda:0' or 'cpu' to prevent PyTorch parse error
     device = str(args.device or "cpu").strip().lower()
@@ -100,13 +102,15 @@ def main() -> int:
                     gpu_name = str(torch.cuda.get_device_name(0) or "")
                 except Exception:
                     gpu_name = ""
-            _progress_writer(18, f"CUDA warmup... {'GPU=' + gpu_name if gpu_name else ''}".strip())
+            _progress_writer(
+                18, f"CUDA warmup... {'GPU=' + gpu_name if gpu_name else ''}".strip())
             # Initialize CUDA context and do a tiny allocation.
             if torch.cuda.is_available():
                 _ = torch.empty((1,), device="cuda")
             _progress_writer(22, "CUDA warmup done.")
         except Exception as e:
-            _progress_writer(22, f"CUDA warmup skipped: {type(e).__name__}: {e}")
+            _progress_writer(
+                22, f"CUDA warmup skipped: {type(e).__name__}: {e}")
 
     try:
         from FunASR import FunASRConfig, transcribe_audio_to_segments
@@ -138,7 +142,8 @@ def main() -> int:
         chunk_seconds=chunk_seconds,
     )
 
-    sys.stdout.write("RESULT|" + json.dumps(segments, ensure_ascii=False) + "\n")
+    sys.stdout.write("RESULT|" + json.dumps(segments,
+                     ensure_ascii=False) + "\n")
     sys.stdout.flush()
     return 0
 

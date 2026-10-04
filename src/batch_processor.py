@@ -59,6 +59,18 @@ class BatchJobItem:
             "fit_audio", not self.auto_video_sync if self.auto_video_sync is not None else default_fit_audio))
         self.log_file = str(raw_job.get("log_file", ""))
 
+        try:
+            from settings_manager import get_export_video_config
+            v_cfg = get_export_video_config()
+        except Exception:
+            v_cfg = {}
+        self.video_quality = str(raw_job.get("video_quality", v_cfg.get("video_quality", "auto")))
+        self.video_crf = int(raw_job.get("video_crf", v_cfg.get("video_crf", 25)))
+        self.compress_enabled = bool(raw_job.get("compress_enabled", v_cfg.get("compress_enabled", True)))
+        self.facebook_faststart = bool(raw_job.get("facebook_faststart", v_cfg.get("facebook_faststart", True)))
+        self.allow_upscale = bool(raw_job.get("allow_upscale", v_cfg.get("allow_upscale", False)))
+        self.audio_bitrate = str(raw_job.get("audio_bitrate", v_cfg.get("audio_bitrate", "96k")))
+
         base_name = os.path.basename(self.video_path)
         stem, ext = os.path.splitext(base_name)
         self.output_path = os.path.join(output_dir, f"dubbed_{stem}.mp4")
@@ -237,6 +249,12 @@ class BatchParallelManager(QObject):
             "preserve_speed": job.preserve_speed,
             "fit_audio": job.fit_audio,
             "log_file": job.log_file,
+            "video_quality": getattr(job, "video_quality", "auto"),
+            "video_crf": getattr(job, "video_crf", 25),
+            "compress_enabled": getattr(job, "compress_enabled", True),
+            "facebook_faststart": getattr(job, "facebook_faststart", True),
+            "allow_upscale": getattr(job, "allow_upscale", False),
+            "audio_bitrate": getattr(job, "audio_bitrate", "96k"),
         }
 
         with open(spec_file, "w", encoding="utf-8") as f:

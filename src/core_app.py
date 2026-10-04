@@ -564,6 +564,7 @@ _orig_dubbing_init = _mod.DubbingApp.__init__
 
 def _dubbing_init_patched(self, *args, **kwargs):
     _orig_dubbing_init(self, *args, **kwargs)
+    self.setStyleSheet("")
     from runtime_paths import resource_path
     from PyQt5.QtGui import QIcon
     for name in ('icon.png', 'icon.ico'):
@@ -631,6 +632,16 @@ def _dubbing_init_patched(self, *args, **kwargs):
                             except Exception as _th_e:
                                 print(
                                     '[WARN] Theme toggle button init error:', _th_e)
+
+                            # Social Post button near toggle theme button
+                            try:
+                                self.btn_social_post = QPushButton("📢 Social Post")
+                                self.btn_social_post.setObjectName("btn_social_post")
+                                self.btn_social_post.setToolTip("Publish video to Facebook Page, YouTube, TikTok")
+                                self.btn_social_post.clicked.connect(lambda: self._open_social_post_window())
+                                row2.addWidget(self.btn_social_post)
+                            except Exception as _sp_e:
+                                print('[WARN] Social post button init error:', _sp_e)
 
                             row2.addStretch()
                             right_col.insertLayout(2, row2)
@@ -922,7 +933,6 @@ def _dubbing_init_patched(self, *args, **kwargs):
 
     # Apply 3-color design system layout margins, typography & semantic button classification
     try:
-        from PyQt5.QtWidgets import QPushButton, QTableWidget
         from PyQt5.QtGui import QFont
 
         # 1. Main layout margins and spacing
@@ -944,24 +954,88 @@ def _dubbing_init_patched(self, *args, **kwargs):
             ])
         self.setFont(main_font)
 
-        # 3. Semantic button tagging
-        hero_ctas = {"Export Video", "Transcribe",
-                     "Translate", "Load Video", "Batch Load"}
-        player_cmds = {"Play", "Stop", "Auto-Sync",
-                       "Auto-Speed", "Video Sync", "Cutter", "Lock Speed"}
+        # 3. Apply comprehensive design system theme
+        self.apply_dialog_theme()
+    except Exception as _ui_rule_e:
+        print('[WARN] UI pattern rule application error:', _ui_rule_e)
+
+
+def apply_dubbing_theme(self, mode=None):
+    """
+    Applies 3-Color Design System theme (dark/light) to the main application window,
+    including central scroll area, timeline editor, buttons, and combo boxes.
+    """
+    try:
+        from theme_manager import get_theme_mode
+        from ui_theme_tokens import (
+            COLOR_CANVAS, COLOR_SURFACE, COLOR_SURFACE_INPUT, COLOR_BORDER,
+            LIGHT_COLOR_CANVAS, LIGHT_COLOR_SURFACE, LIGHT_COLOR_SURFACE_INPUT, LIGHT_COLOR_BORDER
+        )
+        from PyQt5.QtGui import QColor
+        from PyQt5.QtWidgets import QScrollArea, QPushButton, QComboBox, QCheckBox, QTableWidget
+        from PyQt5.QtCore import Qt
+        import ui_widgets
+
+        if mode is None:
+            mode = get_theme_mode()
+        is_dark = str(mode).strip().lower() == "dark"
+
+        # 1. Clear hardcoded QMainWindow light stylesheet so application QSS takes precedence
+        self.setStyleSheet("")
+
+        # 2. Prevent system palette gray leak on central widget and all scroll areas
+        cw = self.centralWidget()
+        if cw:
+            cw.setAutoFillBackground(False)
+            cw.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+            if hasattr(cw, 'widget') and cw.widget():
+                cw.widget().setAutoFillBackground(False)
+                cw.widget().setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+            if hasattr(cw, 'viewport') and cw.viewport():
+                cw.viewport().setAutoFillBackground(False)
+                cw.viewport().setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+
+        for sa in self.findChildren(QScrollArea):
+            sa.setAutoFillBackground(False)
+            sa.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+            if sa.viewport():
+                sa.viewport().setAutoFillBackground(False)
+                sa.viewport().setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+            if sa.widget():
+                sa.widget().setAutoFillBackground(False)
+                sa.widget().setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+
+        # 3. Theme TimelineWidget colors
+        surface_hex = COLOR_SURFACE if is_dark else LIGHT_COLOR_SURFACE
+        input_hex = COLOR_SURFACE_INPUT if is_dark else LIGHT_COLOR_SURFACE_INPUT
+        border_hex = COLOR_BORDER if is_dark else LIGHT_COLOR_BORDER
+
+        for tw in self.findChildren(ui_widgets.TimelineWidget):
+            tw.bg_color = QColor(surface_hex)
+            tw.grid_color = QColor(border_hex)
+            tw.waveform_bg_color = QColor(input_hex)
+            tw.update()
+
+        # 4. Semantic button styling - clear inline hardcoded colors so QSS tokens apply
+        hero_ctas = {"Export Video", "Transcribe", "Translate", "Load Video", "Batch Load"}
+        player_cmds = {"Play", "Stop", "Auto-Sync", "Auto-Speed", "Video Sync", "Cutter", "Lock Speed"}
         for btn in self.findChildren(QPushButton):
             obj_name = btn.objectName()
-            if obj_name in {"btn_theme_toggle", "btn_toggle_effects"}:
+            if obj_name in {"btn_theme_toggle", "btn_toggle_effects", "btn_social_post"}:
                 continue
-            text = btn.text().strip()
-            if any(h in text for h in hero_ctas):
+            txt = btn.text().strip()
+            if any(h in txt for h in hero_ctas):
                 btn.setObjectName("primaryBtn")
-            elif any(p in text for p in player_cmds):
+                btn.setStyleSheet("")
+            elif any(p in txt for p in player_cmds):
                 btn.setObjectName("playerBtn")
-            elif not obj_name:
-                btn.setObjectName("secondaryBtn")
+                btn.setStyleSheet("")
+            else:
+                if not obj_name or obj_name in {"secondaryBtn", "playerBtn", "primaryBtn"}:
+                    btn.setObjectName("secondaryBtn")
+                    btn.setStyleSheet("")
 
-        # 4. Polish QTableWidget headers & alternate row colors
+        # 5. Polish QTableWidget headers & alternate row colors
         for tbl in self.findChildren(QTableWidget):
             tbl.setAlternatingRowColors(True)
             if hasattr(tbl, 'verticalHeader') and tbl.verticalHeader():
@@ -970,16 +1044,52 @@ def _dubbing_init_patched(self, *args, **kwargs):
                 tbl.horizontalHeader().setHighlightSections(False)
             tbl.setShowGrid(True)
 
-        # 5. Sanitize select boxes (QComboBox) to eliminate hardcoded white backgrounds
-        from PyQt5.QtWidgets import QComboBox
+        # 6. Sanitize select boxes (QComboBox) to eliminate hardcoded white backgrounds
         for combo in self.findChildren(QComboBox):
             ss = combo.styleSheet()
             if 'background-color: white' in ss or '#BDC3C7' in ss:
                 combo.setStyleSheet("")
-    except Exception as _ui_rule_e:
-        print('[WARN] UI pattern rule application error:', _ui_rule_e)
+
+        # 7. Theme Cambodian Voice Clone checkbox for high contrast
+        for chk in self.findChildren(QCheckBox):
+            if any(k in chk.text() for k in ["Clon", "ក្លូន", "សំឡេង"]):
+                col = "#F87171" if is_dark else "#DC2626"
+                chk.setStyleSheet(f"font-weight: bold; color: {col};")
+
+        # 8. Update theme toggle button text if present
+        if hasattr(self, 'btn_theme_toggle') and self.btn_theme_toggle:
+            self.btn_theme_toggle.setText("☀️ Light Mode" if is_dark else "🌙 Dark Mode")
+        if hasattr(self, 'btn_social_post') and self.btn_social_post:
+            self.btn_social_post.setStyleSheet("")
+    except Exception as _th_e:
+        print('[WARN] apply_dubbing_theme error:', _th_e)
 
 
+def _open_social_post_window(self):
+    try:
+        from social_post_window import SocialPostWindow
+        existing = getattr(self, '_social_post_window', None)
+        if existing and hasattr(existing, 'isVisible') and existing.isVisible():
+            existing.raise_()
+            existing.activateWindow()
+            return
+
+        candidate = getattr(self, '_last_exported_video', None) or getattr(self, 'video_path', None)
+        win = SocialPostWindow(parent=self, initial_video=candidate)
+        self._social_post_window = win
+        win.show()
+    except Exception as e:
+        print(f"[ERROR] Failed to open Social Post window: {e}")
+        from PyQt5.QtWidgets import QMessageBox
+        QMessageBox.critical(self, "Social Post", f"Failed to open Social Post window:\n{e}")
+
+
+_mod.DubbingApp.apply_dialog_theme = apply_dubbing_theme
+if 'DubbingApp' in globals():
+    globals()['DubbingApp'].apply_dialog_theme = apply_dubbing_theme
+_mod.DubbingApp._open_social_post_window = _open_social_post_window
+if 'DubbingApp' in globals():
+    globals()['DubbingApp']._open_social_post_window = _open_social_post_window
 _mod.DubbingApp.__init__ = _dubbing_init_patched
 
 # Cross-platform VoxCPM path detection
@@ -1542,8 +1652,11 @@ try:
                     if tab_widgets:
                         _settings_window_mod.inject_extra_settings_tabs(
                             widget, tab_widgets[0])
+                        _settings_window_mod.apply_settings_dialog_theme(widget)
                         _injected[0] = True
                         return
+                    else:
+                        _settings_window_mod.apply_settings_dialog_theme(widget)
             # Retry until the dialog appears (max ~2s)
             if not _injected[0]:
                 QTimer.singleShot(30, _inject)
@@ -1773,6 +1886,7 @@ try:
     _orig_start_export_worker = _mod.DubbingApp._start_export_worker
 
     def _start_export_worker_enhanced(self, table_data, path, video_to_use, remove_vocal, use_demucs, export_audio_mix):
+        self._last_exported_video = path
         print(
             f"[EXPORT] Validating multi-voice integrity for {len(table_data)} clips...")
         for i, row in enumerate(table_data):
@@ -1818,13 +1932,48 @@ try:
             print(
                 f"  [EXPORT CLIP {i+1}] voice={resolved_voice} pitch={resolved_pitch} cache={'hit' if expected_cache else 'tts'}")
 
-        return _orig_start_export_worker(self, table_data, path, video_to_use, remove_vocal, use_demucs, export_audio_mix)
+        res = _orig_start_export_worker(self, table_data, path, video_to_use, remove_vocal, use_demucs, export_audio_mix)
+        try:
+            if hasattr(self, "export_worker") and self.export_worker:
+                import settings_manager
+                v_cfg = settings_manager.get_export_video_config()
+                self.export_worker.video_quality = v_cfg.get("video_quality", "auto")
+                self.export_worker.video_crf = v_cfg.get("video_crf", 25)
+                self.export_worker.compress_enabled = v_cfg.get("compress_enabled", True)
+                self.export_worker.facebook_faststart = v_cfg.get("facebook_faststart", True)
+                self.export_worker.allow_upscale = v_cfg.get("allow_upscale", False)
+                self.export_worker.audio_bitrate = v_cfg.get("audio_bitrate", "96k")
+        except Exception as _cfg_err:
+            print(f"[EXPORT] Worker config notice: {_cfg_err}")
+        return res
 
     _mod.DubbingApp._start_export_worker = _start_export_worker_enhanced
     if "DubbingApp" in globals():
         globals()["DubbingApp"]._start_export_worker = _start_export_worker_enhanced
     _mod._orig_start_export_worker = _orig_start_export_worker
     _mod._start_export_worker_enhanced = _start_export_worker_enhanced
+
+    if hasattr(_mod.DubbingApp, "_start_video_speed_adjust_worker"):
+        _orig_start_vspeed_worker = _mod.DubbingApp._start_video_speed_adjust_worker
+        def _start_vspeed_worker_enhanced(self, *args, **kwargs):
+            res = _orig_start_vspeed_worker(self, *args, **kwargs)
+            try:
+                if hasattr(self, "video_speed_worker") and self.video_speed_worker:
+                    import settings_manager
+                    v_cfg = settings_manager.get_export_video_config()
+                    self.video_speed_worker.video_quality = v_cfg.get("video_quality", "auto")
+                    self.video_speed_worker.video_crf = v_cfg.get("video_crf", 25)
+                    self.video_speed_worker.compress_enabled = v_cfg.get("compress_enabled", True)
+                    self.video_speed_worker.facebook_faststart = v_cfg.get("facebook_faststart", True)
+                    self.video_speed_worker.allow_upscale = v_cfg.get("allow_upscale", False)
+                    self.video_speed_worker.audio_bitrate = v_cfg.get("audio_bitrate", "96k")
+            except Exception as _vsp_err:
+                print(f"[VIDEO-SPEED] Worker config notice: {_vsp_err}")
+            return res
+        _mod.DubbingApp._start_video_speed_adjust_worker = _start_vspeed_worker_enhanced
+        if "DubbingApp" in globals():
+            globals()["DubbingApp"]._start_video_speed_adjust_worker = _start_vspeed_worker_enhanced
+
     print("[CORE] Multi-voice export & timeline table synchronization patched successfully.")
 except Exception as _mvoice_err:
     import traceback as _tb

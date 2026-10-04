@@ -503,6 +503,830 @@ def get_modern_stylesheet(mode: str = "dark") -> str:
     QSplitter::handle:horizontal:hover {{
         background-color: {accent};
     }}
+    /* ==========================================================================
+       Tab Widget & Tab Bar (QTabWidget / QTabBar) - High Contrast Responsive Navigation
+       ========================================================================== */
+    QTabWidget::pane {{
+        border: 1px solid {border};
+        border-radius: 10px;
+        background-color: {surface};
+        top: -1px;
+    }}
+    QTabBar::tab {{
+        background-color: {surface};
+        color: {text_muted};
+        border: 1px solid {border};
+        border-bottom: none;
+        padding: 8px 14px;
+        margin-right: 2px;
+        border-top-left-radius: 8px;
+        border-top-right-radius: 8px;
+        font-weight: 600;
+        font-size: 12px;
+        min-height: 20px;
+    }}
+    QTabBar::tab:selected {{
+        background-color: {canvas};
+        color: {accent};
+        border-top: 2px solid {accent};
+        border-bottom: 1px solid {canvas};
+        font-weight: 700;
+    }}
+    QTabBar::tab:hover:!selected {{
+        background-color: {surface_hover};
+        color: {text_primary};
+    }}
+
+    /* ==========================================================================
+       Scroll Areas & Viewport Transparent Cascades
+       ========================================================================== */
+    QScrollArea {{
+        background: transparent;
+        border: none;
+    }}
+    QScrollArea > QWidget > QWidget {{
+        background: transparent;
+    }}
+
+    /* ==========================================================================
+       Menu Bar, Context Menus, and Status Bar
+       ========================================================================== */
+    QMenuBar {{
+        background-color: {canvas};
+        color: {text_primary};
+        border-bottom: 1px solid {border};
+        padding: 2px;
+    }}
+    QMenuBar::item {{
+        background: transparent;
+        padding: 4px 10px;
+        border-radius: 4px;
+    }}
+    QMenuBar::item:selected {{
+        background-color: {surface_hover};
+        color: {text_primary};
+    }}
+    QMenu {{
+        background-color: {surface};
+        color: {text_secondary};
+        border: 1px solid {border_elevated};
+        border-radius: 8px;
+        padding: 4px;
+    }}
+    QMenu::item {{
+        padding: 6px 24px 6px 12px;
+        border-radius: 4px;
+        font-size: 12px;
+    }}
+    QMenu::item:selected {{
+        background-color: {accent};
+        color: #FFFFFF;
+    }}
+    QMenu::separator {{
+        height: 1px;
+        background-color: {border};
+        margin: 4px 6px;
+    }}
+    QStatusBar {{
+        background-color: {canvas};
+        color: {text_muted};
+        border-top: 1px solid {border};
+    }}
+    """
+
+
+def get_settings_dialog_stylesheet(mode: str = "dark") -> str:
+    """
+    Returns a comprehensive, high-contrast stylesheet specifically tailored for the Settings Dialog,
+    ensuring all tabs, informational cards, input fields, and log boxes adhere to the 3-Color Design System:
+    - 60% Base Canvas:       #0F141C (Dark) / #F8FAFC (Light)
+    - 30% Structural Surface: #161D28 (Dark) / #FFFFFF (Light)
+    - Recessed Input Fields: #0D121B (Dark) / #FFFFFF (Light)
+    - 10% Hero Accent:        #F97316 (Flame Orange)
+    """
+    is_dark = str(mode).strip().lower() == "dark"
+
+    if is_dark:
+        canvas = COLOR_CANVAS
+        surface = COLOR_SURFACE
+        input_bg = COLOR_SURFACE_INPUT
+        input_focus_bg = "#121824"
+        card_bg = "#121824"
+        surface_hover = COLOR_SURFACE_HOVER
+        border = COLOR_BORDER
+        border_elevated = COLOR_BORDER_ELEVATED
+        accent = COLOR_ACCENT
+        accent_hover = COLOR_ACCENT_HOVER
+        accent_grad = COLOR_ACCENT_GRADIENT
+        text_primary = COLOR_TEXT_PRIMARY
+        text_secondary = COLOR_TEXT_SECONDARY
+        text_muted = COLOR_TEXT_MUTED
+        btn_sec_bg = "#1a2230"
+        btn_sec_border = "#2b394f"
+        arrow_icon = get_icon_path("arrow_down_orange.svg")
+        check_icon = get_icon_path("check_white.svg")
+        radio_icon = get_icon_path("radio_dot_white.svg")
+        scrollbar_bg = "#0d1117"
+        scrollbar_thumb = "#253142"
+    else:
+        canvas = LIGHT_COLOR_CANVAS
+        surface = LIGHT_COLOR_SURFACE
+        input_bg = LIGHT_COLOR_SURFACE_INPUT
+        input_focus_bg = "#FFFFFF"
+        card_bg = "#F8FAFC"
+        surface_hover = LIGHT_COLOR_SURFACE_HOVER
+        border = LIGHT_COLOR_BORDER
+        border_elevated = LIGHT_COLOR_BORDER_ELEVATED
+        accent = LIGHT_COLOR_ACCENT
+        accent_hover = LIGHT_COLOR_ACCENT_HOVER
+        accent_grad = LIGHT_COLOR_ACCENT_GRADIENT
+        text_primary = LIGHT_COLOR_TEXT_PRIMARY
+        text_secondary = LIGHT_COLOR_TEXT_SECONDARY
+        text_muted = LIGHT_COLOR_TEXT_MUTED
+        btn_sec_bg = "#F1F5F9"
+        btn_sec_border = "#CBD5E1"
+        arrow_icon = get_icon_path("arrow_down_dark.svg")
+        check_icon = get_icon_path("check_white.svg")
+        radio_icon = get_icon_path("radio_dot_white.svg")
+        scrollbar_bg = "#F1F5F9"
+        scrollbar_thumb = "#CBD5E1"
+
+    return f"""
+    QDialog {{
+        background-color: {canvas};
+        color: {text_secondary};
+        font-family: {FONT_FAMILY};
+    }}
+    QWidget {{
+        font-family: {FONT_FAMILY};
+        color: {text_secondary};
+    }}
+    QTabWidget::pane {{
+        border: 1px solid {border};
+        border-radius: 10px;
+        background-color: {surface};
+        top: -1px;
+    }}
+    QTabBar::tab {{
+        background-color: {surface};
+        color: {text_muted};
+        border: 1px solid {border};
+        border-bottom: none;
+        padding: 8px 14px;
+        margin-right: 2px;
+        border-top-left-radius: 8px;
+        border-top-right-radius: 8px;
+        font-weight: 600;
+        font-size: 12px;
+    }}
+    QTabBar::tab:selected {{
+        background-color: {canvas};
+        color: {accent};
+        border-top: 2px solid {accent};
+        border-bottom: 1px solid {canvas};
+        font-weight: 700;
+    }}
+    QTabBar::tab:hover:!selected {{
+        background-color: {surface_hover};
+        color: {text_primary};
+    }}
+    QScrollArea {{
+        background: transparent;
+        border: none;
+    }}
+    QScrollArea > QWidget > QWidget {{
+        background: transparent;
+    }}
+    QGroupBox {{
+        border: 1px solid {border};
+        border-radius: 10px;
+        margin-top: 14px;
+        padding-top: 16px;
+        font-weight: bold;
+        color: {text_primary};
+        background-color: {surface};
+    }}
+    QGroupBox::title {{
+        subcontrol-origin: margin;
+        subcontrol-position: top left;
+        padding: 3px 10px;
+        color: {text_primary};
+        background-color: {'#141a24' if is_dark else '#F1F5F9'};
+        border: 1px solid {border_elevated};
+        border-radius: 6px;
+        font-weight: 700;
+    }}
+    QComboBox, QLineEdit, QSpinBox, QDoubleSpinBox {{
+        background-color: {input_bg};
+        color: {text_primary};
+        border: 1px solid {border_elevated};
+        border-radius: 6px;
+        padding: 5px 8px;
+        min-height: 26px;
+        font-size: 12px;
+    }}
+    QComboBox:hover, QLineEdit:hover, QSpinBox:hover {{
+        border-color: {accent};
+    }}
+    QComboBox:focus, QLineEdit:focus, QSpinBox:focus {{
+        border: 1.5px solid {accent};
+        background-color: {input_focus_bg};
+    }}
+    QComboBox::drop-down {{
+        subcontrol-origin: padding;
+        subcontrol-position: top right;
+        width: 24px;
+        border-left: 1px solid {border_elevated};
+        border-top-right-radius: 6px;
+        border-bottom-right-radius: 6px;
+        background-color: {btn_sec_bg};
+    }}
+    QComboBox::down-arrow {{
+        image: url("{arrow_icon}");
+        width: 12px;
+        height: 12px;
+    }}
+    QComboBox QAbstractItemView {{
+        background-color: {surface};
+        color: {text_secondary};
+        selection-background-color: {accent};
+        selection-color: #FFFFFF;
+        border: 1px solid {border_elevated};
+        border-radius: 6px;
+        padding: 4px;
+    }}
+    QTextEdit, QPlainTextEdit {{
+        background-color: {input_bg};
+        color: {text_primary};
+        border: 1px solid {border_elevated};
+        border-radius: 8px;
+        padding: 8px;
+        font-size: 11.5px;
+    }}
+    QPushButton#primaryBtn {{
+        background: {accent_grad};
+        border: none;
+        border-radius: 16px;
+        color: #FFFFFF;
+        font-weight: 800;
+        font-size: 12.5px;
+        padding: 6px 22px;
+        min-width: 90px;
+    }}
+    QPushButton#primaryBtn:hover {{
+        background: {accent_hover};
+    }}
+    QPushButton, QPushButton#secondaryBtn {{
+        background-color: {btn_sec_bg};
+        color: {text_primary};
+        border: 1px solid {btn_sec_border};
+        border-radius: 8px;
+        padding: 6px 14px;
+        font-size: 12px;
+        font-weight: 700;
+    }}
+    QPushButton:hover, QPushButton#secondaryBtn:hover {{
+        border-color: {accent};
+        background-color: {surface_hover};
+    }}
+    QPushButton#dangerBtn {{
+        background-color: {'#2C1518' if is_dark else '#FEE2E2'};
+        color: {'#F87171' if is_dark else '#DC2626'};
+        border: 1px solid {'#4D2127' if is_dark else '#FECACA'};
+        border-radius: 8px;
+        padding: 6px 14px;
+        font-size: 12px;
+        font-weight: 700;
+    }}
+    QPushButton#dangerBtn:hover {{
+        background-color: {'#3B1B20' if is_dark else '#FCA5A5'};
+        border-color: {'#F87171' if is_dark else '#DC2626'};
+    }}
+    QCheckBox, QRadioButton {{
+        color: {text_secondary};
+        spacing: 8px;
+    }}
+    QCheckBox::indicator, QRadioButton::indicator {{
+        width: 16px;
+        height: 16px;
+        border: 1px solid {border_elevated};
+        border-radius: 4px;
+        background-color: {input_bg};
+    }}
+    QCheckBox::indicator:hover, QRadioButton::indicator:hover {{
+        border-color: {accent};
+    }}
+    QCheckBox::indicator:checked {{
+        background-color: {accent};
+        border-color: {accent};
+        image: url("{check_icon}");
+    }}
+    QRadioButton::indicator {{
+        border-radius: 8px;
+    }}
+    QRadioButton::indicator:checked {{
+        background-color: {accent};
+        border-color: {accent};
+        image: url("{radio_icon}");
+    }}
+    QScrollBar:vertical {{
+        border: none;
+        background: {scrollbar_bg};
+        width: 8px;
+        margin: 0px;
+        border-radius: 4px;
+    }}
+    QScrollBar::handle:vertical {{
+        background: {scrollbar_thumb};
+        min-height: 20px;
+        border-radius: 4px;
+    }}
+    QScrollBar::handle:vertical:hover {{
+        background: {accent};
+    }}
+    """
+
+
+
+def get_batch_mapping_stylesheet(mode: str = "dark") -> str:
+    """
+    Returns the comprehensive, high-contrast QSS stylesheet for the Batch Video + SRT Mapping dialog
+    (EnhancedBatchSrtMappingDialog), adhering strictly to the 3-Color Design System:
+    - 60% Base Canvas:       #0F141C (Dark) / #F8FAFC (Light)
+    - 30% Structural Surface: #161D28 (Dark) / #FFFFFF (Light)
+    - Recessed Input Fields: #0D121B (Dark) / #FFFFFF (Light)
+    - 10% Hero Accent:        #F97316 (Flame Orange)
+    """
+    is_dark = str(mode).strip().lower() == "dark"
+
+    if is_dark:
+        canvas = COLOR_CANVAS
+        surface = COLOR_SURFACE
+        input_bg = COLOR_SURFACE_INPUT
+        input_focus_bg = "#121824"
+        surface_hover = COLOR_SURFACE_HOVER
+        border = COLOR_BORDER
+        border_elevated = COLOR_BORDER_ELEVATED
+        accent = COLOR_ACCENT
+        accent_hover = COLOR_ACCENT_HOVER
+        accent_grad = COLOR_ACCENT_GRADIENT
+        text_primary = COLOR_TEXT_PRIMARY
+        text_secondary = COLOR_TEXT_SECONDARY
+        text_muted = COLOR_TEXT_MUTED
+        table_alt = "#121822"
+        table_header = "#141a24"
+        btn_sec_bg = "#1a2230"
+        btn_sec_border = "#2b394f"
+        arrow_icon = get_icon_path("arrow_down_orange.svg")
+        check_icon = get_icon_path("check_white.svg")
+        radio_icon = get_icon_path("radio_dot_white.svg")
+        scrollbar_bg = "#0d1117"
+        scrollbar_thumb = "#253142"
+
+        row_browse_bg = "#16243A"
+        row_browse_color = "#60A5FA"
+        row_browse_border = "#233A5E"
+        row_browse_hover = "#1E3352"
+
+        row_edit_bg = "#132B1E"
+        row_edit_color = "#4ADE80"
+        row_edit_border = "#1E4D34"
+        row_edit_hover = "#1B3C2A"
+
+        row_gender_bg = "#2F2113"
+        row_gender_color = "#FBBF24"
+        row_gender_border = "#52381F"
+        row_gender_hover = "#3F2C18"
+
+        row_clear_bg = "#1C2333"
+        row_clear_color = "#94A3B8"
+        row_clear_border = "#2B374E"
+        row_clear_hover = "#252F44"
+
+        row_danger_bg = "#2C1518"
+        row_danger_color = "#F87171"
+        row_danger_border = "#4D2127"
+        row_danger_hover = "#3B1B20"
+    else:
+        canvas = LIGHT_COLOR_CANVAS
+        surface = LIGHT_COLOR_SURFACE
+        input_bg = LIGHT_COLOR_SURFACE_INPUT
+        input_focus_bg = "#FFFFFF"
+        surface_hover = LIGHT_COLOR_SURFACE_HOVER
+        border = LIGHT_COLOR_BORDER
+        border_elevated = LIGHT_COLOR_BORDER_ELEVATED
+        accent = LIGHT_COLOR_ACCENT
+        accent_hover = LIGHT_COLOR_ACCENT_HOVER
+        accent_grad = LIGHT_COLOR_ACCENT_GRADIENT
+        text_primary = LIGHT_COLOR_TEXT_PRIMARY
+        text_secondary = LIGHT_COLOR_TEXT_SECONDARY
+        text_muted = LIGHT_COLOR_TEXT_MUTED
+        table_alt = "#F8FAFC"
+        table_header = "#F1F5F9"
+        btn_sec_bg = "#F1F5F9"
+        btn_sec_border = "#CBD5E1"
+        arrow_icon = get_icon_path("arrow_down_dark.svg")
+        check_icon = get_icon_path("check_white.svg")
+        radio_icon = get_icon_path("radio_dot_white.svg")
+        scrollbar_bg = "#F1F5F9"
+        scrollbar_thumb = "#CBD5E1"
+
+        row_browse_bg = "#EEF4FB"
+        row_browse_color = "#2563EB"
+        row_browse_border = "#BFDBFE"
+        row_browse_hover = "#DBEAFE"
+
+        row_edit_bg = "#EAFBF3"
+        row_edit_color = "#16A34A"
+        row_edit_border = "#BBF7D0"
+        row_edit_hover = "#DCFCE7"
+
+        row_gender_bg = "#FFF4E5"
+        row_gender_color = "#D97706"
+        row_gender_border = "#FED7AA"
+        row_gender_hover = "#FFEDD5"
+
+        row_clear_bg = "#F1F5F9"
+        row_clear_color = "#64748B"
+        row_clear_border = "#CBD5E1"
+        row_clear_hover = "#E2E8F0"
+
+        row_danger_bg = "#FEE2E2"
+        row_danger_color = "#DC2626"
+        row_danger_border = "#FECACA"
+        row_danger_hover = "#FCA5A5"
+
+    return f"""
+    /* ==========================================================================
+       Batch Dialog Canvas & Content Wrapper (60% Base)
+       ========================================================================== */
+    QDialog, EnhancedBatchSrtMappingDialog, QWidget#BatchContentWidget {{
+        background-color: {canvas};
+        color: {text_secondary};
+        font-family: {FONT_FAMILY};
+    }}
+    QWidget {{
+        font-family: {FONT_FAMILY};
+        color: {text_secondary};
+    }}
+
+    /* ==========================================================================
+       Header & Section Typography
+       ========================================================================== */
+    QLabel#BatchTitleLabel {{
+        font-size: 19px;
+        font-weight: 800;
+        color: {text_primary};
+    }}
+    QLabel#BatchSubtitleLabel {{
+        color: {text_muted};
+        font-size: 12px;
+        line-height: 1.4;
+        padding-bottom: 4px;
+    }}
+    QLabel#BatchSectionLabel {{
+        font-size: 13px;
+        font-weight: 700;
+        color: {text_primary};
+        padding-top: 4px;
+    }}
+    QLabel#BatchSummaryLabel {{
+        color: {text_secondary};
+        font-size: 12px;
+    }}
+    QLabel#BatchStatusLabel {{
+        color: {text_muted};
+        font-size: 11.5px;
+        padding-bottom: 2px;
+    }}
+    QLabel#BatchHelperLabel, QLabel#BatchFooterLabel {{
+        color: {text_muted};
+        font-size: 11px;
+    }}
+
+    /* ==========================================================================
+       Vocal Removal & Background Mix Group Card (30% Surface)
+       ========================================================================== */
+    QFrame#BatchVocalRemovalFrame {{
+        background-color: {surface};
+        border: 1px solid {border};
+        border-radius: {RADIUS_CARD};
+    }}
+
+    /* ==========================================================================
+       Batch Video Table & Header
+       ========================================================================== */
+    QTableWidget {{
+        background-color: {surface};
+        alternate-background-color: {table_alt};
+        border: 1px solid {border};
+        border-radius: 12px;
+        gridline-color: {border};
+        color: {text_secondary};
+        selection-background-color: {accent};
+        selection-color: #FFFFFF;
+        font-size: 12px;
+    }}
+    QHeaderView::section {{
+        background-color: {table_header};
+        color: {text_primary};
+        font-weight: 700;
+        font-size: 12px;
+        border: none;
+        border-bottom: 1px solid {border};
+        border-right: 1px solid {border};
+        padding: 8px 10px;
+    }}
+    QTableCornerButton::section {{
+        background-color: {table_header};
+        border: 1px solid {border};
+    }}
+
+    /* ==========================================================================
+       Input Fields (QComboBox, QLineEdit, QSpinBox) - Recessed 30% Surface
+       ========================================================================== */
+    QComboBox, QLineEdit, QSpinBox, QDoubleSpinBox {{
+        background-color: {input_bg};
+        color: {text_primary};
+        border: 1px solid {border_elevated};
+        border-radius: {RADIUS_CONTROL};
+        padding: 5px 8px;
+        min-height: 28px;
+        font-size: 12px;
+        font-weight: 500;
+        selection-background-color: {accent};
+        selection-color: #FFFFFF;
+    }}
+    QComboBox:hover, QLineEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover {{
+        border-color: {accent};
+    }}
+    QComboBox:focus, QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
+        border: 1.5px solid {accent};
+        background-color: {input_focus_bg};
+    }}
+    QComboBox:disabled, QLineEdit:disabled, QSpinBox:disabled {{
+        background-color: {'#141a24' if is_dark else '#F1F5F9'};
+        color: {text_muted};
+        border-color: {border};
+    }}
+    QComboBox::drop-down {{
+        subcontrol-origin: padding;
+        subcontrol-position: top right;
+        width: 26px;
+        border-left: 1px solid {border_elevated};
+        border-top-right-radius: {RADIUS_CONTROL};
+        border-bottom-right-radius: {RADIUS_CONTROL};
+        background-color: {btn_sec_bg};
+    }}
+    QComboBox::drop-down:hover {{
+        background-color: {surface_hover};
+    }}
+    QComboBox::down-arrow {{
+        image: url("{arrow_icon}");
+        width: 12px;
+        height: 12px;
+    }}
+    QComboBox QAbstractItemView {{
+        background-color: {surface};
+        color: {text_secondary};
+        selection-background-color: {accent};
+        selection-color: #FFFFFF;
+        border: 1px solid {border_elevated};
+        border-radius: 6px;
+        padding: 4px;
+        outline: none;
+    }}
+    QComboBox QAbstractItemView::item {{
+        min-height: 26px;
+        padding: 4px 8px;
+        border-radius: 4px;
+    }}
+    QComboBox QAbstractItemView::item:hover {{
+        background-color: {surface_hover};
+        color: {text_primary};
+    }}
+    QComboBox QAbstractItemView::item:selected {{
+        background-color: {accent};
+        color: #FFFFFF;
+    }}
+
+    /* ==========================================================================
+       Checkboxes with Vector Indicators
+       ========================================================================== */
+    QCheckBox, QRadioButton {{
+        color: {text_secondary};
+        spacing: 8px;
+    }}
+    QCheckBox::indicator, QRadioButton::indicator {{
+        width: 16px;
+        height: 16px;
+        border: 1px solid {border_elevated};
+        border-radius: 4px;
+        background-color: {input_bg};
+    }}
+    QCheckBox::indicator:hover, QRadioButton::indicator:hover {{
+        border-color: {accent};
+    }}
+    QCheckBox::indicator:checked {{
+        background-color: {accent};
+        border-color: {accent};
+        image: url("{check_icon}");
+    }}
+    QRadioButton::indicator {{
+        border-radius: 8px;
+    }}
+    QRadioButton::indicator:checked {{
+        background-color: {accent};
+        border-color: {accent};
+        image: url("{radio_icon}");
+    }}
+
+    /* ==========================================================================
+       Top Action Buttons (Load SRT, Auto Match, Clear All, Add)
+       ========================================================================== */
+    QPushButton#BatchPrimaryButton {{
+        background-color: {btn_sec_bg};
+        color: {text_primary};
+        border: 1px solid {btn_sec_border};
+        border-radius: {RADIUS_CONTROL};
+        padding: 6px 14px;
+        font-weight: 700;
+        font-size: 12px;
+    }}
+    QPushButton#BatchPrimaryButton:hover {{
+        background-color: {'#222E40' if is_dark else '#E2E8F0'};
+        border-color: {accent};
+    }}
+    QPushButton#BatchInfoButton {{
+        background-color: {'#1E293B' if is_dark else '#F8FAFC'};
+        color: {text_primary};
+        border: 1px solid {'#334155' if is_dark else '#CBD5E1'};
+        border-radius: {RADIUS_CONTROL};
+        padding: 5px 12px;
+        font-weight: 600;
+        font-size: 12px;
+    }}
+    QPushButton#BatchInfoButton:hover {{
+        background-color: {surface_hover};
+        border-color: {accent};
+    }}
+    QPushButton#BatchNeutralButton {{
+        background-color: {surface};
+        color: {text_muted};
+        border: 1px solid {border_elevated};
+        border-radius: {RADIUS_CONTROL};
+        padding: 5px 12px;
+        font-size: 12px;
+    }}
+    QPushButton#BatchNeutralButton:hover {{
+        color: {text_primary};
+        border-color: {accent};
+    }}
+
+    /* ==========================================================================
+       Hero CTA & Dialog Bottom Controls
+       ========================================================================== */
+    QPushButton#BatchStartButton, QPushButton#primaryBtn {{
+        background: {accent_grad};
+        border: none;
+        border-radius: {RADIUS_PILL};
+        color: #FFFFFF;
+        font-weight: 800;
+        font-size: 13px;
+        padding: 8px 24px;
+        min-width: 140px;
+    }}
+    QPushButton#BatchStartButton:hover, QPushButton#primaryBtn:hover {{
+        background: {accent_hover};
+    }}
+    QPushButton#BatchCloseButton, QPushButton#secondaryBtn {{
+        background-color: {btn_sec_bg};
+        color: {text_secondary};
+        border: 1px solid {btn_sec_border};
+        border-radius: {RADIUS_CONTROL};
+        font-weight: 700;
+        font-size: 12px;
+        min-width: 100px;
+        padding: 7px 16px;
+    }}
+    QPushButton#BatchCloseButton:hover, QPushButton#secondaryBtn:hover {{
+        background-color: {'#222E40' if is_dark else '#E2E8F0'};
+        border-color: {text_muted};
+    }}
+
+    /* ==========================================================================
+       Table Row Action Buttons (Browse, Edit, Gender, Clear, Remove)
+       ========================================================================== */
+    QPushButton#BatchRowBrowseButton {{
+        background-color: {row_browse_bg};
+        color: {row_browse_color};
+        border: 1px solid {row_browse_border};
+        border-radius: 6px;
+        padding: 3px 8px;
+        font-weight: 700;
+        font-size: 11px;
+    }}
+    QPushButton#BatchRowBrowseButton:hover {{
+        background-color: {row_browse_hover};
+        border-color: {row_browse_color};
+    }}
+    QPushButton#BatchRowEditButton {{
+        background-color: {row_edit_bg};
+        color: {row_edit_color};
+        border: 1px solid {row_edit_border};
+        border-radius: 6px;
+        padding: 3px 8px;
+        font-weight: 700;
+        font-size: 11px;
+    }}
+    QPushButton#BatchRowEditButton:hover {{
+        background-color: {row_edit_hover};
+        border-color: {row_edit_color};
+    }}
+    QPushButton#BatchRowGenderButton {{
+        background-color: {row_gender_bg};
+        color: {row_gender_color};
+        border: 1px solid {row_gender_border};
+        border-radius: 6px;
+        padding: 3px 8px;
+        font-weight: 700;
+        font-size: 11px;
+    }}
+    QPushButton#BatchRowGenderButton:hover {{
+        background-color: {row_gender_hover};
+        border-color: {row_gender_color};
+    }}
+    QPushButton#BatchRowClearButton {{
+        background-color: {row_clear_bg};
+        color: {row_clear_color};
+        border: 1px solid {row_clear_border};
+        border-radius: 6px;
+        padding: 3px 8px;
+        font-weight: 700;
+        font-size: 11px;
+    }}
+    QPushButton#BatchRowClearButton:hover {{
+        background-color: {row_clear_hover};
+        color: {text_primary};
+        border-color: {row_clear_color};
+    }}
+    QPushButton#dangerBtn, QPushButton#BatchRowRemoveButton {{
+        background-color: {row_danger_bg};
+        color: {row_danger_color};
+        border: 1px solid {row_danger_border};
+        border-radius: 6px;
+        padding: 3px 8px;
+        font-weight: 700;
+        font-size: 11px;
+    }}
+    QPushButton#dangerBtn:hover, QPushButton#BatchRowRemoveButton:hover {{
+        background-color: {row_danger_hover};
+        border-color: {row_danger_color};
+    }}
+
+    /* ==========================================================================
+       Minimal Floating Scrollbars & Tooltips
+       ========================================================================== */
+    QScrollBar:vertical {{
+        border: none;
+        background: {scrollbar_bg};
+        width: 8px;
+        margin: 0px;
+        border-radius: 4px;
+    }}
+    QScrollBar::handle:vertical {{
+        background: {scrollbar_thumb};
+        min-height: 20px;
+        border-radius: 4px;
+    }}
+    QScrollBar::handle:vertical:hover {{
+        background: {accent};
+    }}
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+        height: 0px;
+        border: none;
+        background: none;
+    }}
+    QScrollBar:horizontal {{
+        border: none;
+        background: {scrollbar_bg};
+        height: 8px;
+        margin: 0px;
+        border-radius: 4px;
+    }}
+    QScrollBar::handle:horizontal {{
+        background: {scrollbar_thumb};
+        min-width: 20px;
+        border-radius: 4px;
+    }}
+    QScrollBar::handle:horizontal:hover {{
+        background: {accent};
+    }}
+    QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+        width: 0px;
+        border: none;
+        background: none;
+    }}
     QToolTip {{
         background-color: {table_header};
         color: {text_primary};
@@ -512,3 +1336,4 @@ def get_modern_stylesheet(mode: str = "dark") -> str:
         font-size: 11.5px;
     }}
     """
+

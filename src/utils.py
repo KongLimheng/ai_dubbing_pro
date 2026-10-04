@@ -126,6 +126,193 @@ def apply_khmer_font_patch():
 apply_khmer_font_patch()
 
 
+def _convert_qt_filter_to_zenity(filter_str):
+    if not filter_str:
+        return []
+    import re
+    result = []
+    for part in filter_str.split(';;'):
+        part = part.strip()
+        if not part:
+            continue
+        m = re.match(r'^(.*?)\s*\((.*?)\)$', part)
+        if m:
+            name, pats = m.group(1).strip(), m.group(2).strip()
+            pats = ' '.join('*' if p == '*.*' else p for p in pats.split())
+            result.append(f'--file-filter={name} | {pats}')
+        else:
+            result.append(f'--file-filter={part}')
+    return result
+
+
+def _extract_dialog_args(args, kwargs, param_names):
+    extracted = {}
+    for i, name in enumerate(param_names):
+        if i < len(args):
+            extracted[name] = args[i]
+        elif name in kwargs:
+            extracted[name] = kwargs[name]
+        else:
+            extracted[name] = None
+    return extracted
+
+
+def apply_ubuntu_dialog_patch():
+    """
+    Patches PyQt5.QtWidgets.QFileDialog to display the native Ubuntu GNOME / GTK3
+    dialog box style on Linux/Ubuntu instead of the Qt-style dialog box.
+
+    Applies seamlessly to:
+    - Main window actions: 'Open Video', 'Import SRT', 'Select Output Directory'
+    - Batch tools, Video to MP3, Cutter, DramaBox, Settings
+    - Compiled bytecode (DubbingApp in core_app.pyc)
+    """
+    if sys.platform != 'linux' or not shutil.which('zenity'):
+        return
+
+    try:
+        from PyQt5.QtWidgets import QFileDialog
+
+        if getattr(QFileDialog, '_ubuntu_dialog_patched', False):
+            return
+
+        _orig_getOpenFileName = QFileDialog.getOpenFileName
+        _orig_getOpenFileNames = QFileDialog.getOpenFileNames
+        _orig_getExistingDirectory = QFileDialog.getExistingDirectory
+        _orig_getSaveFileName = QFileDialog.getSaveFileName
+
+        file_params = ['parent', 'caption', 'directory', 'filter', 'initialFilter', 'options']
+        dir_params = ['parent', 'caption', 'directory', 'options']
+
+        def _patched_getOpenFileName(*args, **kwargs):
+            try:
+                d = _extract_dialog_args(args, kwargs, file_params)
+                cmd = ['zenity', '--file-selection']
+                if d.get('caption'):
+                    cmd.append(f"--title={d['caption']}")
+                if d.get('directory'):
+                    p = os.path.expanduser(str(d['directory']).strip())
+                    if os.path.isdir(p) and not p.endswith(os.sep):
+                        p += os.sep
+                    cmd.append(f"--filename={p}")
+                filter_args = _convert_qt_filter_to_zenity(d.get('filter') or '')
+                cmd.extend(filter_args)
+
+                proc = subprocess.run(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace'
+                )
+                if proc.returncode == 0:
+                    chosen = proc.stdout.strip()
+                    return (chosen, '')
+                return ('', '')
+            except Exception as e:
+                _startup_log(f"Zenity open file error, falling back: {e}")
+                return _orig_getOpenFileName(*args, **kwargs)
+
+        def _patched_getOpenFileNames(*args, **kwargs):
+            try:
+                d = _extract_dialog_args(args, kwargs, file_params)
+                cmd = ['zenity', '--file-selection', '--multiple', '--separator=|']
+                if d.get('caption'):
+                    cmd.append(f"--title={d['caption']}")
+                if d.get('directory'):
+                    p = os.path.expanduser(str(d['directory']).strip())
+                    if os.path.isdir(p) and not p.endswith(os.sep):
+                        p += os.sep
+                    cmd.append(f"--filename={p}")
+                filter_args = _convert_qt_filter_to_zenity(d.get('filter') or '')
+                cmd.extend(filter_args)
+
+                proc = subprocess.run(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace'
+                )
+                if proc.returncode == 0:
+                    raw = proc.stdout.strip()
+                    files = [f for f in raw.split('|') if f]
+                    return (files, '')
+                return ([], '')
+            except Exception as e:
+                _startup_log(f"Zenity open files error, falling back: {e}")
+                return _orig_getOpenFileNames(*args, **kwargs)
+
+        def _patched_getExistingDirectory(*args, **kwargs):
+            try:
+                d = _extract_dialog_args(args, kwargs, dir_params)
+                cmd = ['zenity', '--file-selection', '--directory']
+                if d.get('caption'):
+                    cmd.append(f"--title={d['caption']}")
+                if d.get('directory'):
+                    p = os.path.expanduser(str(d['directory']).strip())
+                    if os.path.isdir(p) and not p.endswith(os.sep):
+                        p += os.sep
+                    cmd.append(f"--filename={p}")
+
+                proc = subprocess.run(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace'
+                )
+                if proc.returncode == 0:
+                    return proc.stdout.strip()
+                return ''
+            except Exception as e:
+                _startup_log(f"Zenity existing directory error, falling back: {e}")
+                return _orig_getExistingDirectory(*args, **kwargs)
+
+        def _patched_getSaveFileName(*args, **kwargs):
+            try:
+                d = _extract_dialog_args(args, kwargs, file_params)
+                cmd = ['zenity', '--file-selection', '--save', '--confirm-overwrite']
+                if d.get('caption'):
+                    cmd.append(f"--title={d['caption']}")
+                if d.get('directory'):
+                    p = os.path.expanduser(str(d['directory']).strip())
+                    cmd.append(f"--filename={p}")
+                filter_args = _convert_qt_filter_to_zenity(d.get('filter') or '')
+                cmd.extend(filter_args)
+
+                proc = subprocess.run(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace'
+                )
+                if proc.returncode == 0:
+                    chosen = proc.stdout.strip()
+                    return (chosen, '')
+                return ('', '')
+            except Exception as e:
+                _startup_log(f"Zenity save file error, falling back: {e}")
+                return _orig_getSaveFileName(*args, **kwargs)
+
+        QFileDialog.getOpenFileName = staticmethod(_patched_getOpenFileName)
+        QFileDialog.getOpenFileNames = staticmethod(_patched_getOpenFileNames)
+        QFileDialog.getExistingDirectory = staticmethod(_patched_getExistingDirectory)
+        QFileDialog.getSaveFileName = staticmethod(_patched_getSaveFileName)
+        QFileDialog._ubuntu_dialog_patched = True
+        _startup_log("Ubuntu native dialog patch applied successfully.")
+    except Exception as e:
+        _startup_log(f"Failed to apply Ubuntu dialog patch: {e}")
+
+
+apply_ubuntu_dialog_patch()
+
+
 def get_days_used():
     try:
         from settings_manager import get_config_file_path

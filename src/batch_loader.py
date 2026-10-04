@@ -98,6 +98,151 @@ def create_enhanced_batch_mapping_dialog_class(base_dialog_class):
         def _sort_file_paths_naturally(self, file_paths):
             return sort_file_paths_naturally(file_paths)
 
+        def _apply_dialog_style(self):
+            """Overrides the compiled base light stylesheet with 3-Color Design System tokens."""
+            self.apply_dialog_theme()
+
+        def apply_dialog_theme(self, mode=None):
+            """
+            Applies the comprehensive 3-Color Design System stylesheet (Dark or Light)
+            to the dialog, inner content container, and updates table cells & summary pills.
+            """
+            try:
+                from theme_manager import get_theme_mode
+                from ui_theme_tokens import (
+                    get_batch_mapping_stylesheet, COLOR_CANVAS, COLOR_SURFACE_INPUT,
+                    COLOR_TEXT_PRIMARY, COLOR_TEXT_SECONDARY,
+                    LIGHT_COLOR_CANVAS, LIGHT_COLOR_SURFACE_INPUT,
+                    LIGHT_COLOR_TEXT_PRIMARY, LIGHT_COLOR_TEXT_SECONDARY
+                )
+                from PyQt5.QtGui import QPalette, QColor
+                from PyQt5.QtCore import Qt
+
+                if mode is None:
+                    mode = get_theme_mode()
+                self._current_theme_mode = mode
+                is_dark = str(mode).strip().lower() == "dark"
+
+                stylesheet = get_batch_mapping_stylesheet(mode)
+                self.setStyleSheet(stylesheet)
+
+                cw = getattr(self, '_content_widget', None)
+                if not cw:
+                    from PyQt5.QtWidgets import QWidget
+                    cw = self.findChild(QWidget, "BatchContentWidget") or self.findChild(QWidget)
+                    if cw:
+                        self._content_widget = cw
+
+                if cw:
+                    cw.setObjectName("BatchContentWidget")
+                    cw.setAutoFillBackground(False)
+                    cw.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+                    cw.setStyleSheet(stylesheet)
+
+                # Set dialog and content widget palettes to prevent OS system palette leakage
+                canvas_hex = COLOR_CANVAS if is_dark else LIGHT_COLOR_CANVAS
+                input_hex = COLOR_SURFACE_INPUT if is_dark else LIGHT_COLOR_SURFACE_INPUT
+                text_primary_hex = COLOR_TEXT_PRIMARY if is_dark else LIGHT_COLOR_TEXT_PRIMARY
+                text_sec_hex = COLOR_TEXT_SECONDARY if is_dark else LIGHT_COLOR_TEXT_SECONDARY
+
+                pal = self.palette()
+                pal.setColor(QPalette.Window, QColor(canvas_hex))
+                pal.setColor(QPalette.WindowText, QColor(text_primary_hex))
+                pal.setColor(QPalette.Base, QColor(input_hex))
+                pal.setColor(QPalette.Text, QColor(text_sec_hex))
+                self.setPalette(pal)
+                if cw:
+                    cw.setPalette(pal)
+
+                # Refresh summary pills and table row items with theme styling
+                if hasattr(self, 'table') and hasattr(self, '_refresh_assignment_cells'):
+                    self._refresh_assignment_cells()
+            except Exception as e:
+                print(f"[BatchLoader] apply_dialog_theme notice: {e}")
+
+        def _set_status_message(self, message, color=None):
+            """Displays a status message with theme-calibrated contrast."""
+            try:
+                from theme_manager import get_theme_mode
+                is_dark = str(get_theme_mode()).strip().lower() == "dark"
+                if color is None or color == '#486581':
+                    color = "#94A3B8" if is_dark else "#486581"
+            except Exception:
+                if color is None:
+                    color = "#94A3B8"
+            super()._set_status_message(message, color=color)
+
+        def _refresh_assignment_cells(self):
+            """Refreshes table cell status colors and formats summary badges with theme tokens."""
+            super()._refresh_assignment_cells()
+            try:
+                import re
+                mode = getattr(self, '_current_theme_mode', None)
+                if mode is None:
+                    from theme_manager import get_theme_mode
+                    mode = get_theme_mode()
+                is_dark = str(mode).strip().lower() == "dark"
+
+                # Update row text colors for high readability in both dark and light modes
+                from PyQt5.QtGui import QBrush, QColor
+                for r in range(self.table.rowCount()):
+                    # Col 0: Video file name (inherit CSS color & selection color)
+                    v_item = self.table.item(r, 0)
+                    if v_item:
+                        v_item.setForeground(QBrush())
+                    # Col 1: Folder path (inherit CSS color & selection color)
+                    f_item = self.table.item(r, 1)
+                    if f_item:
+                        f_item.setForeground(QBrush())
+                    # Col 2: Assigned SRT (Status badge color: green for mapped, muted for auto)
+                    s_item = self.table.item(r, 2)
+                    if s_item:
+                        txt = s_item.text().strip()
+                        if txt == "Auto Transcribe" or not txt:
+                            s_item.setForeground(QColor("#94A3B8" if is_dark else "#64748B"))
+                        else:
+                            s_item.setForeground(QColor("#4ADE80" if is_dark else "#16A34A"))
+
+                # Reformat summary badges
+                if hasattr(self, 'summary_label') and self.summary_label:
+                    current_html = self.summary_label.text() or ""
+                    parsed = re.findall(r'<b>(.*?)</b>\s*(\d+)', current_html)
+                    if parsed:
+                        dark_styles = {
+                            'Mapped': 'background:#143322; color:#4ADE80; border:1px solid #1E5C38;',
+                            'Auto': 'background:#1E2633; color:#94A3B8; border:1px solid #2B384B;',
+                            'SRT Tags': 'background:#332412; color:#FB923C; border:1px solid #5C3A1A;',
+                            'Piseth': 'background:#1E223D; color:#818CF8; border:1px solid #313A6B;',
+                            'Sreymom': 'background:#331526; color:#F472B6; border:1px solid #5C2243;',
+                            'Pitch': 'background:#2B2113; color:#FBBF24; border:1px solid #4D3B1D;',
+                            'Speed': 'background:#0F293D; color:#38BDF8; border:1px solid #1B4B6E;',
+                            'Echo': 'background:#2A1636; color:#C084FC; border:1px solid #4B2461;',
+                            'Timeline': 'background:#143322; color:#4ADE80; border:1px solid #1E5C38;',
+                            'SRT Pool': 'background:#241838; color:#A78BFA; border:1px solid #402963;',
+                        }
+                        light_styles = {
+                            'Mapped': 'background:#EAFBF3; color:#16A34A; border:1px solid #BBF7D0;',
+                            'Auto': 'background:#F1F4F8; color:#475569; border:1px solid #CBD5E1;',
+                            'SRT Tags': 'background:#FFF8E8; color:#D97706; border:1px solid #FED7AA;',
+                            'Piseth': 'background:#EEF2FF; color:#4F46E5; border:1px solid #C7D2FE;',
+                            'Sreymom': 'background:#FFF1F7; color:#DB2777; border:1px solid #FBCFE8;',
+                            'Pitch': 'background:#FFFBEB; color:#B45309; border:1px solid #FDE68A;',
+                            'Speed': 'background:#F0F9FF; color:#0284C7; border:1px solid #BAE6FD;',
+                            'Echo': 'background:#FAF5FF; color:#9333EA; border:1px solid #E9D5FF;',
+                            'Timeline': 'background:#EAFBF3; color:#16A34A; border:1px solid #BBF7D0;',
+                            'SRT Pool': 'background:#F5F3FF; color:#7C3AED; border:1px solid #DDD6FE;',
+                        }
+                        badges = []
+                        for lbl, cnt in parsed:
+                            if is_dark:
+                                st = dark_styles.get(lbl, 'background:#1E2633; color:#F1F5F9; border:1px solid #2B384B;')
+                            else:
+                                st = light_styles.get(lbl, 'background:#F1F4F8; color:#1E293B; border:1px solid #CBD5E1;')
+                            badges.append(f"<span style='{st} padding:3px 9px; border-radius:10px; font-weight:600;'><b>{lbl}</b> {cnt}</span>")
+                        self.summary_label.setText("  ".join(badges))
+            except Exception as e:
+                print(f"[BatchLoader] _refresh_assignment_cells notice: {e}")
+
         def __init__(self, video_files, parent=None):
             # Ensure valid video_files list
             initial_videos = list(video_files or [])
@@ -118,6 +263,11 @@ def create_enhanced_batch_mapping_dialog_class(base_dialog_class):
                         cw.setMinimumSize(QSize(0, 0))
                         cw.setSizePolicy(QSizePolicy.Expanding,
                                          QSizePolicy.Expanding)
+                        self._content_widget = cw
+                        cw.setObjectName("BatchContentWidget")
+                        cw.setAutoFillBackground(False)
+                        from PyQt5.QtCore import Qt
+                        cw.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
                         cw_layout = cw.layout()
                         if cw_layout:
@@ -167,6 +317,9 @@ def create_enhanced_batch_mapping_dialog_class(base_dialog_class):
             # Polish table column headers and sizing
             self._polish_table_layout()
 
+            # Apply 3-color design system theme (Dark or Light)
+            self.apply_dialog_theme()
+
         def _inject_vocal_removal_controls(self):
             """
             Injects Vocal Removal (Demucs) and Background Mix controls into the batch dialog.
@@ -186,7 +339,7 @@ def create_enhanced_batch_mapping_dialog_class(base_dialog_class):
                         bulk_idx = i
                         break
 
-                from PyQt5.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QCheckBox, QLabel, QSpinBox
+                from PyQt5.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QCheckBox, QLabel, QSpinBox, QComboBox
 
                 # Container frame for clear visual grouping
                 vocal_frame = QFrame()
@@ -310,11 +463,47 @@ def create_enhanced_batch_mapping_dialog_class(base_dialog_class):
                 self.chk_batch_sync_tts = self.chk_batch_auto_sync
 
                 sync_hint = QLabel("💡 Adjusts video cuts to dialogue; voice is 100% crisp, natural, and never compressed")
-                sync_hint.setStyleSheet("font-size: 11px; font-style: italic; opacity: 0.8;")
+                sync_hint.setObjectName("BatchSubtitleLabel")
+                sync_hint.setStyleSheet("font-size: 11px; font-style: italic; opacity: 0.85;")
                 row2_layout.addWidget(sync_hint)
                 row2_layout.addStretch()
 
                 vocal_layout.addLayout(row2_layout)
+
+                # Row 3: Video Quality & Facebook Compression
+                row3_layout = QHBoxLayout()
+                row3_layout.setSpacing(14)
+
+                from settings_manager import get_export_video_config
+                v_cfg = get_export_video_config()
+                init_quality = v_cfg.get("video_quality", "auto")
+                init_compress = v_cfg.get("compress_enabled", True)
+
+                lbl_video_qual = QLabel("📹 Video Export Quality:")
+                lbl_video_qual.setStyleSheet("font-weight: 600;")
+                row3_layout.addWidget(lbl_video_qual)
+
+                self.cmb_batch_video_quality = QComboBox()
+                self.cmb_batch_video_quality.setObjectName("BatchCmbVideoQuality")
+                self.cmb_batch_video_quality.addItem("Auto / Match Source (Recommended - Smart Size, ~15-20MB)", "auto")
+                self.cmb_batch_video_quality.addItem("720p HD (Facebook Standard - Downscale Only, ~20MB)", "720p")
+                self.cmb_batch_video_quality.addItem("1080p Full HD (Downscale Only, ~35-45MB)", "1080p")
+                self.cmb_batch_video_quality.addItem("Original Source Resolution (Preserve Stream)", "source")
+                self.cmb_batch_video_quality.setStyleSheet("min-width: 270px; font-weight: bold;")
+                idx = self.cmb_batch_video_quality.findData(init_quality)
+                if idx >= 0:
+                    self.cmb_batch_video_quality.setCurrentIndex(idx)
+                row3_layout.addWidget(self.cmb_batch_video_quality)
+
+                self.chk_batch_compress = QCheckBox("⚡ Compress for Facebook & Web")
+                self.chk_batch_compress.setObjectName("BatchChkCompress")
+                self.chk_batch_compress.setChecked(init_compress)
+                self.chk_batch_compress.setToolTip("Reduces file size by ~75% (from 100MB/min to ~20MB/min) while keeping crisp 720p HD quality and faststart.")
+                self.chk_batch_compress.setStyleSheet("font-weight: 600;")
+                row3_layout.addWidget(self.chk_batch_compress)
+                row3_layout.addStretch()
+
+                vocal_layout.addLayout(row3_layout)
 
                 # Insert into parent layout right after bulk controls
                 insert_pos = bulk_idx + 1 if bulk_idx >= 0 else 4
@@ -426,35 +615,29 @@ def create_enhanced_batch_mapping_dialog_class(base_dialog_class):
             super()._build_rows()
             try:
                 for r in range(self.table.rowCount()):
+                    # Set transparent background on cell container widgets to blend seamlessly
+                    echo_widget = self.table.cellWidget(r, 6)
+                    if echo_widget:
+                        echo_widget.setStyleSheet("background: transparent;")
+
                     action_widget = self.table.cellWidget(r, 7)
                     if action_widget and action_widget.layout():
+                        action_widget.setStyleSheet("background: transparent;")
                         action_widget.setMinimumWidth(320)
                         layout = action_widget.layout()
-                        layout.setSpacing(3)
+                        layout.setSpacing(4)
                         layout.setContentsMargins(2, 2, 2, 2)
-
-                        # Compact existing action buttons in this cell
-                        for i in range(layout.count()):
-                            w = layout.itemAt(i).widget()
-                            if w and isinstance(w, QPushButton):
-                                cur_style = w.styleSheet() or ""
-                                if "padding" not in cur_style:
-                                    w.setStyleSheet(
-                                        cur_style + "; padding: 2px 6px; font-size: 11px;")
 
                         # Verify Remove button not already added
                         has_remove = False
                         for i in range(layout.count()):
                             w = layout.itemAt(i).widget()
-                            if w and getattr(w, 'objectName', lambda: '')() == 'BatchRowRemoveButton':
+                            if w and getattr(w, 'objectName', lambda: '')() in ('BatchRowRemoveButton', 'dangerBtn'):
                                 has_remove = True
                                 break
                         if not has_remove:
                             remove_btn = QPushButton("❌ Remove")
                             remove_btn.setObjectName("dangerBtn")
-                            remove_btn.setStyleSheet(
-                                "padding: 2px 6px; font-weight: bold; border-radius: 4px; font-size: 11px;"
-                            )
                             remove_btn.setToolTip(
                                 "Remove this video from the batch list (or select row and press Delete)")
                             remove_btn.clicked.connect(
@@ -764,7 +947,27 @@ def create_enhanced_batch_mapping_dialog_class(base_dialog_class):
                 except Exception:
                     pass
 
-            # Attach audio mixing & timing sync options to every job
+            # Read video quality & compression preferences
+            chosen_quality = "auto"
+            compress_enabled = True
+            if hasattr(self, "cmb_batch_video_quality"):
+                chosen_quality = self.cmb_batch_video_quality.currentData() or "auto"
+            if hasattr(self, "chk_batch_compress"):
+                compress_enabled = bool(self.chk_batch_compress.isChecked())
+
+            try:
+                from settings_manager import save_export_video_config
+                save_export_video_config(
+                    video_quality=chosen_quality,
+                    video_crf=25,
+                    compress_enabled=compress_enabled,
+                    allow_upscale=False,
+                    audio_bitrate="96k",
+                )
+            except Exception:
+                pass
+
+            # Attach audio mixing, timing sync & video quality options to every job
             for j in jobs:
                 j["remove_vocal"] = remove_vocal
                 j["use_demucs"] = use_demucs
@@ -773,6 +976,10 @@ def create_enhanced_batch_mapping_dialog_class(base_dialog_class):
                 j["auto_video_sync"] = auto_sync
                 j["preserve_speed"] = auto_sync
                 j["fit_audio"] = sync_tts
+                j["video_quality"] = chosen_quality
+                j["compress_enabled"] = compress_enabled
+                j["allow_upscale"] = False
+                j["audio_bitrate"] = "96k"
 
             self.hide()
 

@@ -36,8 +36,9 @@ def _append_error_log(title, details):
 
 def launch_app():
     try:
-        from utils import apply_khmer_font_patch
+        from utils import apply_khmer_font_patch, apply_ubuntu_dialog_patch
         apply_khmer_font_patch()
+        apply_ubuntu_dialog_patch()
     except Exception:
         pass
 

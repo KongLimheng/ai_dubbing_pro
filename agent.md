@@ -204,8 +204,35 @@ On Windows: returns `ffmpeg.exe` from project root.
 
 ## 7. Gemini API Usage
 
+The application uses the modern **Google GenAI SDK (`google-genai`)** with stateless clients, direct REST endpoints, and transparent backward compatibility for compiled bytecode:
+
+### Modern SDK Usage (Recommended)
 ```python
-from ai_clients import genai  # LazyModule — safe to import anywhere
+from ai_clients import get_genai_client
+
+# Obtain a cached client instance for the specified (or settings default) key:
+client = get_genai_client(api_key="YOUR_KEY")
+
+# Text generation:
+response = client.models.generate_content(
+    model="gemini-2.5-flash",
+    contents="Your prompt",
+)
+print(response.text)
+
+# Audio / File API:
+audio_file = client.files.upload(file="path/to/audio.mp3")
+response = client.models.generate_content(
+    model="gemini-2.5-flash",
+    contents=[audio_file, "Transcribe this audio file"],
+)
+client.files.delete(name=audio_file.name)
+```
+
+### Legacy Compatibility Shim
+For pre-compiled bytecode (`core_app.pyc`, `workers.pyc`), `src/ai_clients.py` provides a drop-in compatibility shim for `google.generativeai`:
+```python
+from ai_clients import genai
 
 genai.configure(api_key="YOUR_KEY")
 model = genai.GenerativeModel("gemini-2.5-flash")
@@ -213,9 +240,9 @@ response = model.generate_content("Your prompt")
 print(response.text)
 ```
 
-- If `google-generativeai` SDK is missing, `ai_clients.py` provides a REST fallback automatically.
-- The SDK is patched to use `transport="rest"` by default (avoids gRPC timeout issues).
-- API key rotation: use `settings_manager.normalize_gemini_api_keys()` to get key list.
+- If `google-genai` SDK is unavailable, `src/ai_clients.py` provides a pure REST fallback automatically.
+- No Google Discovery document fetching bug (`AQ.Ab8...` keys work out-of-the-box).
+- API key rotation: use `settings_manager.normalize_gemini_api_keys()` to obtain the key list.
 
 ---
 
@@ -264,6 +291,23 @@ PYTHONPATH=src .venv/bin/python -c "import settings_manager; print(settings_mana
 ---
 
 ## 10. Recent Changes (Session Log)
+
+### 2026-10-02 — Facebook Graph API Posting Enhancements (Playlists, Group Sharing, Schedule Public)
+**Files:** `src/social_post_config.py`, `src/social_post_uploader.py`, `src/social_post_window.py`, `test_facebook_graph_enhancements.py` (new)
+
+**Features & Improvements:**
+1. **Facebook Status Control**: Added support for "🚀 Publish Immediately", "🕒 Schedule Public", and "📝 Save as Draft".
+   - Scheduled posts adhere to Meta Graph API requirements (`published=false`, `scheduled_publish_time=<unix_ts>`, min 11 minutes in the future).
+   - Added schedule panel with `QDateTimeEdit`, calendar popup, quick presets (`+30m`, `+1h`, `+3h`, `+1d`, `Tomorrow 9AM`), and batch queue interval offsetting.
+2. **Page Playlists Retrieval**:
+   - Upgraded `FacebookUploader.fetch_page_playlists` with schema fallback across Graph API version differences and cursor pagination (`paging.next`).
+   - Integrated non-blocking `FacebookPlaylistsWorker(QThread)`.
+3. **Fetch All Available Groups & Multi-Group Sharing**:
+   - Implemented `FacebookUploader.fetch_all_available_groups` querying `/me/groups` (with page_token and user_token) and `/{page_id}/groups` with pagination, deduplication, and admin-first sorting.
+   - Integrated non-blocking `FacebookGroupsWorker(QThread)`.
+   - Added `FacebookGroupSelectorDialog` modal with search/filter, admin/public chips, "Select All", and counter.
+   - Enhanced `FacebookUploader.share_video_to_groups` for distributing post links with per-group error isolation.
+4. Added unit test suite `test_facebook_graph_enhancements.py` with 100% pass rate.
 
 ### 2026-09-25 — Batch Vocal Removal (Demucs) & Background Music Mixing Parity
 **Files:** `src/batch_loader.py`, `src/batch_processor.py`, `src/batch_runner.py`, `test_batch_vocal_removal.py` (new)

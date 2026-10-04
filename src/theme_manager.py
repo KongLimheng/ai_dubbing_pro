@@ -44,12 +44,24 @@ def apply_theme(theme_mode, target=None):
     if target and hasattr(target, "setStyleSheet") and target is not app:
         target.setStyleSheet(stylesheet)
 
-    # Save to configuration
+    # Save to configuration first so get_theme_mode() returns the new mode immediately
     try:
         from settings_manager import save_theme_mode
         save_theme_mode("dark" if is_dark else "light")
     except Exception:
         pass
+
+    # Notify active top-level windows/dialogs (such as EnhancedBatchSrtMappingDialog)
+    if app:
+        try:
+            for top_w in app.topLevelWidgets():
+                if hasattr(top_w, "apply_dialog_theme") and callable(top_w.apply_dialog_theme):
+                    try:
+                        top_w.apply_dialog_theme(theme_mode)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
 
 def toggle_theme(target=None):

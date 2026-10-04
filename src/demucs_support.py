@@ -55,15 +55,30 @@ try:
     payload["torch_cuda_version"] = getattr(torch.version, "cuda", None)
     payload["torch_hip_version"] = getattr(torch.version, "hip", None)
     if hasattr(torch, "cuda") and torch.cuda.is_available():
-        payload["gpu_available"] = True
-        payload["cuda_available"] = True
-        payload["preferred_device"] = "cuda"
-        payload["device_backend"] = "hip" if payload["torch_hip_version"] else "cuda"
-        payload["cuda_device_count"] = int(torch.cuda.device_count())
         try:
-            payload["cuda_device_name"] = torch.cuda.get_device_name(0)
-        except Exception as exc:
-            payload["cuda_name_error"] = str(exc)
+            # Verify that CUDA kernels can actually execute on this GPU architecture
+            # (prevents false positives on older GPUs like Pascal sm_61 when modern torch lacks kernels)
+            _test_cuda = torch.zeros(1, device="cuda")
+            payload["gpu_available"] = True
+            payload["cuda_available"] = True
+            payload["preferred_device"] = "cuda"
+            payload["device_backend"] = "hip" if payload["torch_hip_version"] else "cuda"
+            payload["cuda_device_count"] = int(torch.cuda.device_count())
+            try:
+                payload["cuda_device_name"] = torch.cuda.get_device_name(0)
+            except Exception as exc:
+                payload["cuda_name_error"] = str(exc)
+        except Exception as _cuda_exec_err:
+            payload["gpu_available"] = False
+            payload["cuda_available"] = False
+            payload["preferred_device"] = "cpu"
+            payload["device_backend"] = "cpu"
+            payload["cuda_arch_unsupported"] = True
+            payload["cuda_error"] = str(_cuda_exec_err)
+            try:
+                payload["cuda_device_name"] = torch.cuda.get_device_name(0)
+            except Exception:
+                pass
     else:
         xpu = getattr(torch, "xpu", None)
         if xpu and hasattr(xpu, "is_available") and xpu.is_available():
@@ -138,13 +153,14 @@ def get_demucs_model_repo_path():
     """Return a bundled local Demucs model repo when available."""
     def _has_model_assets(repo_dir):
         try:
-            for entry in os.scandir(repo_dir):
-                if entry.is_file():
-                    lower_name = entry.name.lower()
-                    if lower_name.endswith(('.th', '.yaml', '.pt', '.pth')):
+            with os.scandir(repo_dir) as entries:
+                for entry in entries:
+                    if entry.is_file():
+                        lower_name = entry.name.lower()
+                        if lower_name.endswith(('.th', '.yaml', '.pt', '.pth')):
+                            return True
+                    elif entry.is_dir() and _has_model_assets(entry.path):
                         return True
-                elif entry.is_dir() and _has_model_assets(entry.path):
-                    return True
         except Exception:
             pass
         return False

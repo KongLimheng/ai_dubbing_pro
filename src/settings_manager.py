@@ -513,11 +513,57 @@ def save_deepseek_api_config(api_key, auto_translate, target_language, model='de
     })
 
 
+_ENCODER_CODEC_MAP = {
+    'nvenc': 'h264_nvenc',
+    'amf': 'h264_amf',
+    'qsv': 'h264_qsv',
+}
+_ENCODER_PROBE_CACHE = {}
+
+
+def is_video_encoder_supported(encoder_mode: str) -> bool:
+    """Checks if a video encoder (nvenc, amf, qsv, cpu) is actually functional at runtime."""
+    mode = str(encoder_mode or 'cpu').strip().lower()
+    if mode in ('cpu', 'libx264', ''):
+        return True
+    if mode in _ENCODER_PROBE_CACHE:
+        return _ENCODER_PROBE_CACHE[mode]
+
+    codec = _ENCODER_CODEC_MAP.get(mode)
+    if not codec:
+        _ENCODER_PROBE_CACHE[mode] = False
+        return False
+
+    try:
+        import subprocess
+        import shutil
+        ffmpeg_bin = shutil.which('ffmpeg') or 'ffmpeg'
+        cmd = [
+            ffmpeg_bin,
+            '-y', '-hide_banner', '-loglevel', 'error',
+            '-f', 'lavfi', '-i', 'nullsrc=s=128x128:d=0.1',
+            '-c:v', codec,
+            '-f', 'null', '-',
+        ]
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=3)
+        ok = (res.returncode == 0)
+        _ENCODER_PROBE_CACHE[mode] = ok
+        if not ok:
+            print(f"[WARN] Video encoder '{mode}' ({codec}) is not functional on this hardware. Falling back to CPU (libx264).", file=sys.stderr)
+        return ok
+    except Exception:
+        _ENCODER_PROBE_CACHE[mode] = False
+        return False
+
+
 def get_hardware_config():
-    """Get hardware acceleration configuration."""
+    """Get hardware acceleration configuration with runtime capability verification."""
     config = read_config()
+    configured = config.get('video_encoder', 'cpu')
+    if configured != 'cpu' and not is_video_encoder_supported(configured):
+        return {'video_encoder': 'cpu'}
     return {
-        'video_encoder': config.get('video_encoder', 'cpu'),
+        'video_encoder': configured,
     }
 
 
@@ -690,6 +736,71 @@ def save_batch_output_dir(output_dir_path):
     """Save Batch mode output directory configuration."""
     return write_config({
         'batch_output_dir': str(output_dir_path or ''),
+    })
+
+
+def get_export_video_config():
+    """
+    Get video export quality and compression settings.
+    Defaults to 'auto' (Match Source / Smart Size, no upscaling), CRF 25, 96k AAC.
+    """
+    config = read_config()
+    exp = config.get('export_video', {})
+    if not isinstance(exp, dict):
+        exp = {}
+    
+    quality = str(exp.get('video_quality', 'auto') or 'auto').strip().lower()
+    if quality not in {'auto', 'source', '720p', '1080p'}:
+        quality = 'auto'
+        
+    try:
+        crf = int(exp.get('video_crf', 25))
+        crf = max(16, min(32, crf))
+    except Exception:
+        crf = 25
+
+    target_bitrate = str(exp.get('target_bitrate', '3.2M') or '3.2M').strip()
+    max_bitrate = str(exp.get('max_bitrate', '4.5M') or '4.5M').strip()
+    faststart = bool(exp.get('facebook_faststart', True))
+    compress_enabled = bool(exp.get('compress_enabled', True))
+    allow_upscale = bool(exp.get('allow_upscale', False))
+    audio_bitrate = str(exp.get('audio_bitrate', '96k') or '96k').strip()
+
+    return {
+        'video_quality': quality,
+        'video_crf': crf,
+        'target_bitrate': target_bitrate,
+        'max_bitrate': max_bitrate,
+        'facebook_faststart': faststart,
+        'compress_enabled': compress_enabled,
+        'allow_upscale': allow_upscale,
+        'audio_bitrate': audio_bitrate,
+    }
+
+
+def save_export_video_config(video_quality='auto', video_crf=25, target_bitrate='3.2M',
+                             max_bitrate='4.5M', facebook_faststart=True, compress_enabled=True,
+                             allow_upscale=False, audio_bitrate='96k'):
+    """Save video export quality and compression configuration."""
+    quality = str(video_quality or 'auto').strip().lower()
+    if quality not in {'auto', 'source', '720p', '1080p'}:
+        quality = 'auto'
+    try:
+        crf = max(16, min(32, int(video_crf)))
+    except Exception:
+        crf = 25
+    
+    return write_config({
+        'export_video': {
+            'video_quality': quality,
+            'video_crf': crf,
+            'target_bitrate': str(target_bitrate or '3.2M').strip(),
+            'max_bitrate': str(max_bitrate or '4.5M').strip(),
+            'facebook_faststart': bool(facebook_faststart),
+            'compress_enabled': bool(compress_enabled),
+            'allow_upscale': bool(allow_upscale),
+            'audio_bitrate': str(audio_bitrate or '96k').strip(),
+        }
     })
 
 

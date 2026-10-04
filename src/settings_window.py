@@ -46,6 +46,7 @@ LANG_OPTIONS = [
 
 # ── Helper functions ───────────────────────────────────────────────────────────
 
+
 def _make_lang_combo(current='km', parent=None):
     """Create a language selection QComboBox pre-selected to `current`."""
     combo = QComboBox(parent)
@@ -74,6 +75,13 @@ def _label_row(label_text, widget, label_width=145):
     h = QHBoxLayout()
     lbl = QLabel(label_text)
     lbl.setFixedWidth(label_width)
+    try:
+        from settings_manager import get_theme_mode
+        is_dark = get_theme_mode() == "dark"
+    except Exception:
+        is_dark = True
+    color = "#F1F5F9" if is_dark else "#0F172A"
+    lbl.setStyleSheet(f"color: {color}; font-size: 12px; font-weight: 500;")
     h.addWidget(lbl)
     h.addWidget(widget, 1)
     return h
@@ -85,6 +93,14 @@ def _scrollable(inner_widget):
     scroll.setWidget(inner_widget)
     scroll.setWidgetResizable(True)
     scroll.setFrameShape(QFrame.NoFrame)
+    scroll.setAutoFillBackground(False)
+    scroll.setAttribute(Qt.WA_StyledBackground, True)
+    if scroll.viewport():
+        scroll.viewport().setAutoFillBackground(False)
+        scroll.viewport().setAttribute(Qt.WA_StyledBackground, True)
+    if inner_widget:
+        inner_widget.setAutoFillBackground(False)
+        inner_widget.setAttribute(Qt.WA_StyledBackground, True)
     return scroll
 
 
@@ -104,7 +120,13 @@ def _hint(text):
     lbl = QLabel(text)
     lbl.setWordWrap(True)
     lbl.setObjectName("mutedLabel")
-    lbl.setStyleSheet("color: #64748B; font-size: 11px; padding-bottom: 4px;")
+    try:
+        from settings_manager import get_theme_mode
+        is_dark = get_theme_mode() == "dark"
+    except Exception:
+        is_dark = True
+    color = "#94A3B8" if is_dark else "#64748B"
+    lbl.setStyleSheet(f"color: {color}; font-size: 11px; padding-bottom: 4px;")
     return lbl
 
 
@@ -182,7 +204,8 @@ def _build_more_apis_tab():
     # ── Gladia ──────────────────────────────────────
     txt_gladia_key = _make_key_edit("Gladia primary API key...")
     txt_gladia_extra = QTextEdit()
-    txt_gladia_extra.setPlaceholderText("Extra keys for rotation (one per line)")
+    txt_gladia_extra.setPlaceholderText(
+        "Extra keys for rotation (one per line)")
     txt_gladia_extra.setFixedHeight(60)
     chk_gladia_rotate = QCheckBox("Rotate keys when quota exhausted")
     cmb_gladia_lang = _make_lang_combo()
@@ -217,28 +240,35 @@ def _build_more_apis_tab():
             cfg = settings_manager.get_openai_api_config()
             txt_openai_key.setText(cfg.get('api_key', ''))
             idx = cmb_openai_model.findData(cfg.get('model', 'gpt-4o-mini'))
-            if idx >= 0: cmb_openai_model.setCurrentIndex(idx)
-            chk_openai_translate.setChecked(bool(cfg.get('auto_translate', False)))
+            if idx >= 0:
+                cmb_openai_model.setCurrentIndex(idx)
+            chk_openai_translate.setChecked(
+                bool(cfg.get('auto_translate', False)))
             idx = cmb_openai_lang.findData(cfg.get('target_language', 'km'))
-            if idx >= 0: cmb_openai_lang.setCurrentIndex(idx)
+            if idx >= 0:
+                cmb_openai_lang.setCurrentIndex(idx)
         except Exception as e:
             print(f"[SETTINGS] Load OpenAI: {e}")
 
         try:
             cfg = settings_manager.get_groq_api_config()
             txt_groq_key.setText(cfg.get('api_key', ''))
-            chk_groq_translate.setChecked(bool(cfg.get('auto_translate', False)))
+            chk_groq_translate.setChecked(
+                bool(cfg.get('auto_translate', False)))
             idx = cmb_groq_lang.findData(cfg.get('target_language', 'km'))
-            if idx >= 0: cmb_groq_lang.setCurrentIndex(idx)
+            if idx >= 0:
+                cmb_groq_lang.setCurrentIndex(idx)
         except Exception as e:
             print(f"[SETTINGS] Load Groq: {e}")
 
         try:
             cfg = settings_manager.get_assemblyai_api_config()
             txt_aai_key.setText(cfg.get('api_key', ''))
-            chk_aai_translate.setChecked(bool(cfg.get('auto_translate', False)))
+            chk_aai_translate.setChecked(
+                bool(cfg.get('auto_translate', False)))
             idx = cmb_aai_lang.findData(cfg.get('target_language', 'km'))
-            if idx >= 0: cmb_aai_lang.setCurrentIndex(idx)
+            if idx >= 0:
+                cmb_aai_lang.setCurrentIndex(idx)
         except Exception as e:
             print(f"[SETTINGS] Load AssemblyAI: {e}")
 
@@ -246,21 +276,25 @@ def _build_more_apis_tab():
             cfg = settings_manager.get_deepseek_api_config()
             txt_ds_key.setText(cfg.get('api_key', ''))
             idx = cmb_ds_model.findData(cfg.get('model', 'deepseek-chat'))
-            if idx >= 0: cmb_ds_model.setCurrentIndex(idx)
+            if idx >= 0:
+                cmb_ds_model.setCurrentIndex(idx)
             chk_ds_translate.setChecked(bool(cfg.get('auto_translate', False)))
             idx = cmb_ds_lang.findData(cfg.get('target_language', 'km'))
-            if idx >= 0: cmb_ds_lang.setCurrentIndex(idx)
+            if idx >= 0:
+                cmb_ds_lang.setCurrentIndex(idx)
         except Exception as e:
             print(f"[SETTINGS] Load DeepSeek: {e}")
 
         try:
             cfg = settings_manager.get_gladia_api_config()
             txt_gladia_key.setText(cfg.get('api_key', ''))
-            extra = [k for k in cfg.get('api_keys', []) if k != cfg.get('api_key', '')]
+            extra = [k for k in cfg.get(
+                'api_keys', []) if k != cfg.get('api_key', '')]
             txt_gladia_extra.setPlainText('\n'.join(extra))
             chk_gladia_rotate.setChecked(bool(cfg.get('rotate_keys', True)))
             idx = cmb_gladia_lang.findData(cfg.get('target_language', 'km'))
-            if idx >= 0: cmb_gladia_lang.setCurrentIndex(idx)
+            if idx >= 0:
+                cmb_gladia_lang.setCurrentIndex(idx)
         except Exception as e:
             print(f"[SETTINGS] Load Gladia: {e}")
 
@@ -311,7 +345,8 @@ def _build_more_apis_tab():
             print(f"[SETTINGS] Save DeepSeek: {e}")
 
         try:
-            extra_keys = [k.strip() for k in txt_gladia_extra.toPlainText().splitlines() if k.strip()]
+            extra_keys = [
+                k.strip() for k in txt_gladia_extra.toPlainText().splitlines() if k.strip()]
             settings_manager.save_gladia_api_config(
                 api_key=txt_gladia_key.text().strip(),
                 api_keys=extra_keys,
@@ -346,7 +381,8 @@ def _build_translation_tab():
     # Translation Engine
     gb_engine = _make_group_box("⚙️ Translation Engine")
     gl = QVBoxLayout(gb_engine)
-    gl.addWidget(_hint("Select which AI or service is used to translate subtitles after transcription."))
+    gl.addWidget(_hint(
+        "Select which AI or service is used to translate subtitles after transcription."))
 
     cmb_engine = QComboBox()
     for label, code in [
@@ -383,7 +419,8 @@ def _build_translation_tab():
 
         try:
             config = settings_manager.read_config()
-            lang = config.get('transcribe_target_language', config.get('gemini_target_language', 'km'))
+            lang = config.get('transcribe_target_language',
+                              config.get('gemini_target_language', 'km'))
             idx = cmb_default_lang.findData(lang)
             if idx >= 0:
                 cmb_default_lang.setCurrentIndex(idx)
@@ -392,7 +429,8 @@ def _build_translation_tab():
 
     def save():
         try:
-            settings_manager.save_translation_config(cmb_engine.currentData() or 'gemini')
+            settings_manager.save_translation_config(
+                cmb_engine.currentData() or 'gemini')
         except Exception as e:
             print(f"[SETTINGS] Save translation engine: {e}")
 
@@ -422,7 +460,8 @@ def _build_appearance_tab():
     # Theme
     gb_theme = _make_group_box("🎨 UI Theme")
     gl = QVBoxLayout(gb_theme)
-    gl.addWidget(_hint("Theme change takes effect after restarting the application."))
+    gl.addWidget(
+        _hint("Theme change takes effect after restarting the application."))
     btn_group = QButtonGroup(gb_theme)
     rb_dark = QRadioButton("🌙 Dark (default)")
     rb_light = QRadioButton("☀️ Light")
@@ -437,7 +476,8 @@ def _build_appearance_tab():
     gb_sub = _make_group_box("📝 Burn Subtitle Style")
     gl = QVBoxLayout(gb_sub)
     gl.setSpacing(8)
-    gl.addWidget(_hint("Applies when you use 'Burn Subtitles into video'. Does not affect SRT export."))
+    gl.addWidget(_hint(
+        "Applies when you use 'Burn Subtitles into video'. Does not affect SRT export."))
 
     # Font family
     txt_font_family = QLineEdit()
@@ -468,7 +508,8 @@ def _build_appearance_tab():
         btn.setText(f"  {new_color}")
 
     def pick_font_color(checked=False):
-        c = QColorDialog.getColor(QColor(_font_color[0]), page, "Choose Font Color")
+        c = QColorDialog.getColor(
+            QColor(_font_color[0]), page, "Choose Font Color")
         if c.isValid():
             _update_color_btn(btn_font_color, _font_color, c.name())
 
@@ -476,12 +517,13 @@ def _build_appearance_tab():
     gl.addLayout(_label_row("Font Color:", btn_font_color))
 
     # Font opacity
-    sld_opacity = QSlider(Qt.Horizontal)
+    sld_opacity = QSlider(Qt.Orientation.Horizontal)
     sld_opacity.setRange(0, 100)
     sld_opacity.setValue(100)
     lbl_opacity_val = QLabel("100%")
     lbl_opacity_val.setFixedWidth(36)
-    sld_opacity.valueChanged.connect(lambda v: lbl_opacity_val.setText(f"{v}%"))
+    sld_opacity.valueChanged.connect(
+        lambda v: lbl_opacity_val.setText(f"{v}%"))
 
     h_opacity = QHBoxLayout()
     lbl_opacity_lbl = QLabel("Font Opacity:")
@@ -502,8 +544,10 @@ def _build_appearance_tab():
     def pick_bg_color(checked=False):
         raw = _bg_color[0]
         # Strip alpha prefix (#AARRGGBB → #RRGGBB) for color dialog
-        hex_rgb = '#' + raw.lstrip('#')[-6:] if len(raw.lstrip('#')) >= 6 else '#000000'
-        c = QColorDialog.getColor(QColor(hex_rgb), page, "Choose Background Color")
+        hex_rgb = '#' + \
+            raw.lstrip('#')[-6:] if len(raw.lstrip('#')) >= 6 else '#000000'
+        c = QColorDialog.getColor(
+            QColor(hex_rgb), page, "Choose Background Color")
         if c.isValid():
             _update_color_btn(btn_bg_color, _bg_color, c.name())
 
@@ -546,6 +590,11 @@ def _build_appearance_tab():
         try:
             mode = 'light' if rb_light.isChecked() else 'dark'
             settings_manager.save_theme_mode(mode)
+            try:
+                from theme_manager import apply_theme
+                apply_theme(mode)
+            except Exception:
+                pass
         except Exception as e:
             print(f"[SETTINGS] Save theme: {e}")
 
@@ -607,7 +656,8 @@ def _build_export_tab():
     # Batch Output Directory
     gb_batch = _make_group_box("📁 Batch Output Directory")
     gl = QVBoxLayout(gb_batch)
-    gl.addWidget(_hint("Default output folder for Batch Dubbing. Leave blank to save next to each source video."))
+    gl.addWidget(_hint(
+        "Default output folder for Batch Dubbing. Leave blank to save next to each source video."))
 
     h_dir = QHBoxLayout()
     txt_batch_dir = QLineEdit()
@@ -619,7 +669,8 @@ def _build_export_tab():
     btn_clear.setObjectName("secondaryBtn")
 
     def browse_dir(checked=False):
-        d = QFileDialog.getExistingDirectory(page, "Select Batch Output Directory", txt_batch_dir.text())
+        d = QFileDialog.getExistingDirectory(
+            page, "Select Batch Output Directory", txt_batch_dir.text())
         if d:
             txt_batch_dir.setText(d)
 
@@ -631,6 +682,36 @@ def _build_export_tab():
     h_dir.addWidget(btn_clear)
     gl.addLayout(h_dir)
     layout.addWidget(gb_batch)
+
+    # Video Quality & Facebook Compression
+    gb_video = _make_group_box("📹 Video Quality & Facebook Compression")
+    gv = QVBoxLayout(gb_video)
+    gv.setSpacing(8)
+    gv.addWidget(_hint(
+        "Optimize video resolution and compress file size for Facebook and web uploads.\n"
+        "Facebook recommends 720p HD (2.5 - 3.5 Mbps) which reduces 1-minute video size from ~100MB to ~20-25MB."
+    ))
+
+    h_preset = QHBoxLayout()
+    lbl_preset = QLabel("📹 Video Resolution & Preset:")
+    lbl_preset.setFixedWidth(230)
+    cmb_video_quality = QComboBox()
+    cmb_video_quality.addItem("Auto / Match Source (Recommended - Smart Size, ~15-20MB)", "auto")
+    cmb_video_quality.addItem("720p HD (Facebook Standard - Downscale Only, ~20MB)", "720p")
+    cmb_video_quality.addItem("1080p Full HD (Downscale Only, ~35-45MB)", "1080p")
+    cmb_video_quality.addItem("Original Source Resolution (Preserve Stream)", "source")
+    cmb_video_quality.setStyleSheet("padding: 4px; min-width: 280px;")
+    h_preset.addWidget(lbl_preset)
+    h_preset.addWidget(cmb_video_quality)
+    h_preset.addStretch()
+    gv.addLayout(h_preset)
+
+    chk_faststart = QCheckBox("🚀 Optimize MP4 for Facebook & Streaming (+faststart)")
+    chk_faststart.setChecked(True)
+    chk_faststart.setToolTip("Places MOOV atom at the front of the MP4 container so Facebook can process and stream the video instantly.")
+    gv.addWidget(chk_faststart)
+
+    layout.addWidget(gb_video)
 
     layout.addStretch()
 
@@ -648,6 +729,16 @@ def _build_export_tab():
         except Exception as e:
             print(f"[SETTINGS] Load batch output dir: {e}")
 
+        try:
+            vcfg = settings_manager.get_export_video_config()
+            q = vcfg.get('video_quality', 'auto')
+            idx = cmb_video_quality.findData(q)
+            if idx >= 0:
+                cmb_video_quality.setCurrentIndex(idx)
+            chk_faststart.setChecked(vcfg.get('facebook_faststart', True))
+        except Exception as e:
+            print(f"[SETTINGS] Load video quality: {e}")
+
     def save():
         try:
             settings_manager.save_export_audio_mix_config(
@@ -658,9 +749,23 @@ def _build_export_tab():
             print(f"[SETTINGS] Save audio mix: {e}")
 
         try:
-            settings_manager.save_batch_output_dir(txt_batch_dir.text().strip())
+            settings_manager.save_batch_output_dir(
+                txt_batch_dir.text().strip())
         except Exception as e:
             print(f"[SETTINGS] Save batch dir: {e}")
+
+        try:
+            chosen_q = cmb_video_quality.currentData() or "auto"
+            settings_manager.save_export_video_config(
+                video_quality=chosen_q,
+                video_crf=25,
+                facebook_faststart=chk_faststart.isChecked(),
+                compress_enabled=(chosen_q != "source"),
+                allow_upscale=False,
+                audio_bitrate="96k",
+            )
+        except Exception as e:
+            print(f"[SETTINGS] Save video quality: {e}")
 
     return _scrollable(page), load, save
 
@@ -679,7 +784,8 @@ def _build_advanced_tab():
     # UI Feature Flags
     gb_flags = _make_group_box("🔌 UI Feature Flags")
     gl = QVBoxLayout(gb_flags)
-    gl.addWidget(_hint("Enable or disable optional UI modules. Changes take effect after restarting the app."))
+    gl.addWidget(_hint(
+        "Enable or disable optional UI modules. Changes take effect after restarting the app."))
 
     chk_voxcpm2 = QCheckBox("✅ Enable VoxCPM2 voice synthesis")
     chk_rvc = QCheckBox("✅ Enable RVC voice conversion")
@@ -714,12 +820,15 @@ def _build_advanced_tab():
         _txt = txt
 
         def _browse(checked=False):
+
             if _is_file:
-                f, _ = QFileDialog.getOpenFileName(page, f"Select {label_text}")
+                f, _ = QFileDialog.getOpenFileName(
+                    page, f"Select {label_text}")
                 if f:
                     _txt.setText(f)
             else:
-                d = QFileDialog.getExistingDirectory(page, f"Select {label_text}", _txt.text())
+                d = QFileDialog.getExistingDirectory(
+                    page, f"Select {label_text}", _txt.text())
                 if d:
                     _txt.setText(d)
 
@@ -751,7 +860,8 @@ def _build_advanced_tab():
             flags = settings_manager.get_ui_feature_flags()
             chk_voxcpm2.setChecked(bool(flags.get('enable_voxcpm2', True)))
             chk_rvc.setChecked(bool(flags.get('enable_rvc', True)))
-            chk_voice_clone.setChecked(bool(flags.get('enable_voice_clone', True)))
+            chk_voice_clone.setChecked(
+                bool(flags.get('enable_voice_clone', True)))
         except Exception as e:
             print(f"[SETTINGS] Load feature flags: {e}")
 
@@ -852,21 +962,112 @@ def inject_extra_settings_tabs(dialog, tab_widget):
             save_btn.clicked.connect(_on_extended_save)
             print(f"[SETTINGS] Hooked extended save → {save_btn.text()!r}")
         else:
-            print("[SETTINGS] ⚠ Could not locate Save button — extended settings will not auto-save.")
+            print(
+                "[SETTINGS] ⚠ Could not locate Save button — extended settings will not auto-save.")
 
-        # Modernize all buttons in the settings dialog to conform to UI Design System
-        for btn in dialog.findChildren(QPushButton):
-            txt = (btn.text() or '').strip().lower()
-            if btn is save_btn or 'save' in txt or 'ok' in txt:
-                btn.setObjectName('primaryBtn')
-                btn.setStyleSheet('')
-            elif 'cancel' in txt or 'close' in txt:
-                btn.setObjectName('secondaryBtn')
-                btn.setStyleSheet('')
+        # Modernize all buttons and apply complete 3-Color Design System theme
+        apply_settings_dialog_theme(dialog)
 
-        print(f"[SETTINGS] Injected 5 extra tabs. Total tabs: {tab_widget.count()}")
+        print(
+            f"[SETTINGS] Injected 5 extra tabs. Total tabs: {tab_widget.count()}")
 
     except Exception as exc:
         import traceback
         print(f"[SETTINGS] inject_extra_settings_tabs failed: {exc}")
         traceback.print_exc()
+
+
+def apply_settings_dialog_theme(dialog, mode=None):
+    """
+    Applies the 3-Color Design System theme (dark/light) to the settings dialog,
+    including QTabWidget, tab bars, cards, labels, and scrollareas.
+    """
+    if mode is None:
+        try:
+            import settings_manager
+            mode = settings_manager.get_theme_mode()
+        except Exception:
+            mode = "dark"
+    is_dark = str(mode).strip().lower() == "dark"
+
+    from ui_theme_tokens import (
+        get_settings_dialog_stylesheet,
+        COLOR_CANVAS, COLOR_SURFACE, COLOR_SURFACE_INPUT, COLOR_TEXT_PRIMARY, COLOR_TEXT_SECONDARY, COLOR_TEXT_MUTED,
+        COLOR_BORDER, COLOR_BORDER_ELEVATED,
+        LIGHT_COLOR_CANVAS, LIGHT_COLOR_SURFACE, LIGHT_COLOR_SURFACE_INPUT, LIGHT_COLOR_TEXT_PRIMARY,
+        LIGHT_COLOR_TEXT_SECONDARY, LIGHT_COLOR_TEXT_MUTED, LIGHT_COLOR_BORDER, LIGHT_COLOR_BORDER_ELEVATED
+    )
+    from PyQt5.QtGui import QPalette, QColor
+    from PyQt5.QtWidgets import QScrollArea, QLabel, QComboBox, QLineEdit, QTextEdit, QPlainTextEdit, QPushButton, QTabWidget
+
+    canvas = COLOR_CANVAS if is_dark else LIGHT_COLOR_CANVAS
+    surface = COLOR_SURFACE if is_dark else LIGHT_COLOR_SURFACE
+    input_bg = COLOR_SURFACE_INPUT if is_dark else LIGHT_COLOR_SURFACE_INPUT
+    card_bg = "#121824" if is_dark else "#F8FAFC"
+    border = COLOR_BORDER if is_dark else LIGHT_COLOR_BORDER
+    border_elevated = COLOR_BORDER_ELEVATED if is_dark else LIGHT_COLOR_BORDER_ELEVATED
+    text_primary = COLOR_TEXT_PRIMARY if is_dark else LIGHT_COLOR_TEXT_PRIMARY
+    text_secondary = COLOR_TEXT_SECONDARY if is_dark else LIGHT_COLOR_TEXT_SECONDARY
+    text_muted = COLOR_TEXT_MUTED if is_dark else LIGHT_COLOR_TEXT_MUTED
+
+    # 1. Apply dedicated settings stylesheet
+    dialog.setStyleSheet(get_settings_dialog_stylesheet(mode))
+
+    # 2. Synchronize QPalette to avoid OS gray bleed
+    pal = dialog.palette()
+    pal.setColor(QPalette.Window, QColor(canvas))
+    pal.setColor(QPalette.WindowText, QColor(text_primary))
+    pal.setColor(QPalette.Base, QColor(input_bg))
+    pal.setColor(QPalette.Text, QColor(text_secondary))
+    dialog.setPalette(pal)
+
+    # 3. Clean up scroll areas
+    for sa in dialog.findChildren(QScrollArea):
+        sa.setAutoFillBackground(False)
+        sa.setAttribute(Qt.WA_StyledBackground, True)
+        if sa.viewport():
+            sa.viewport().setAutoFillBackground(False)
+            sa.viewport().setAttribute(Qt.WA_StyledBackground, True)
+        if sa.widget():
+            sa.widget().setAutoFillBackground(False)
+            sa.widget().setAttribute(Qt.WA_StyledBackground, True)
+
+    # 4. Sanitize labels and white info boxes
+    for lbl in dialog.findChildren(QLabel):
+        ss = lbl.styleSheet() or ""
+        # Informational card boxes
+        if any(w in ss for w in ["#FDFEFE", "#FBFCFC", "#F4F6F7", "white", "2px solid"]):
+            lbl.setStyleSheet(f"background-color: {card_bg}; padding: 10px; border-radius: 8px; border: 1px solid {border_elevated}; color: {text_primary};")
+        elif any(c in ss for c in ["#2C3E50", "#34495E", "#5D6D7E"]):
+            if "16px" in ss:
+                lbl.setStyleSheet(f"font-size: 16px; font-weight: bold; color: {text_primary}; padding: 8px;")
+            elif "11px" in ss:
+                lbl.setStyleSheet(f"color: {text_muted}; font-size: 11px;")
+            else:
+                lbl.setStyleSheet(f"font-weight: bold; color: {text_primary}; padding: 4px 0;")
+
+    # 5. Sanitize combo boxes, line edits, text edits
+    for cb in dialog.findChildren(QComboBox):
+        cb.setStyleSheet("")
+    for le in dialog.findChildren(QLineEdit):
+        if "border: 2px solid" in (le.styleSheet() or ""):
+            le.setStyleSheet("")
+    for te in dialog.findChildren((QTextEdit, QPlainTextEdit)):
+        te.setStyleSheet("")
+
+    # 6. Demucs and dialog buttons
+    for btn in dialog.findChildren(QPushButton):
+        txt = btn.text().strip()
+        txt_l = txt.lower()
+        if "save" in txt_l or "ok" in txt_l:
+            btn.setObjectName("primaryBtn")
+            btn.setStyleSheet("")
+        elif "cancel" in txt_l or "close" in txt_l or any(k in txt for k in ["Install", "Uninstall", "Refresh", "Browse", "Clear"]):
+            if "uninstall" in txt_l:
+                btn.setObjectName("dangerBtn")
+            else:
+                btn.setObjectName("secondaryBtn")
+            btn.setStyleSheet("")
+
+    # Attach apply_dialog_theme for live theme updates
+    dialog.apply_dialog_theme = lambda new_mode=None: apply_settings_dialog_theme(dialog, new_mode)

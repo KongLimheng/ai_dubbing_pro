@@ -28,6 +28,7 @@ for stream in (sys.stdout, sys.stderr):
 
 class LogStreamTee:
     """Tees a stream (stdout/stderr) to both its original destination and a persistent log file."""
+
     def __init__(self, stream, log_path, prefix=""):
         self.stream = stream
         self.log_path = log_path
@@ -77,6 +78,7 @@ class LogStreamTee:
 
 class JobLogger:
     """Structured logger writing to both stdout and a persistent job log file."""
+
     def __init__(self, log_path=None):
         self.log_path = log_path
         if self.log_path:
@@ -142,7 +144,8 @@ def parse_srt_file(srt_path):
         with open(srt_path, "r", encoding="utf-8", errors="replace") as f:
             content = f.read()
     except Exception as e:
-        print(f"[RUNNER WARN] Failed to read SRT {srt_path}: {e}", file=sys.stderr)
+        print(
+            f"[RUNNER WARN] Failed to read SRT {srt_path}: {e}", file=sys.stderr)
         return []
 
     # Use core_app's parse_srt to properly detect [voice:...] tags and characters
@@ -153,9 +156,11 @@ def parse_srt_file(srt_path):
         if segments:
             return segments
     except Exception as e:
-        print(f"[RUNNER DEBUG] Fallback to regex srt parser: {e}", file=sys.stderr)
+        print(
+            f"[RUNNER DEBUG] Fallback to regex srt parser: {e}", file=sys.stderr)
 
-    text = content.replace("```srt", "").replace("```", "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    text = content.replace("```srt", "").replace(
+        "```", "").replace("\r\n", "\n").replace("\r", "\n").strip()
     segments = []
     pattern = re.compile(
         r"(\d{1,2}:\d{2}:\d{2}[,\.]\d{1,3})\s*-->\s*(\d{1,2}:\d{2}:\d{2}[,\.]\d{1,3})\s*[\r\n]+(.*?)(?=(?:\r?\n\s*(?:\d+\s+)?\d{1,2}:\d{2}:\d{2}[,\.]\d{1,3}\s*-->|\Z))",
@@ -180,7 +185,8 @@ def run_job(spec):
     video_path = spec.get("video_path", "")
     srt_path = spec.get("srt_path", None)
     timeline_segments = spec.get("timeline_segments", None)
-    voice_id = spec.get("voice_id", "km-KH-SreymomNeural") or "km-KH-SreymomNeural"
+    voice_id = spec.get(
+        "voice_id", "km-KH-SreymomNeural") or "km-KH-SreymomNeural"
     pitch = spec.get("pitch", "0") or "0"
     rate = spec.get("rate", "0%") or "0%"
     eco_enabled = bool(spec.get("eco_enabled", False))
@@ -194,10 +200,17 @@ def run_job(spec):
     preserve_speed = bool(spec.get("preserve_speed", False))
     fit_audio = bool(spec.get("fit_audio", not auto_video_sync))
     log_file = spec.get("log_file", None)
+    video_quality = str(spec.get("video_quality", "auto") or "auto")
+    video_crf = int(spec.get("video_crf", 25))
+    compress_enabled = bool(spec.get("compress_enabled", True))
+    facebook_faststart = bool(spec.get("facebook_faststart", True))
+    allow_upscale = bool(spec.get("allow_upscale", False))
+    audio_bitrate = str(spec.get("audio_bitrate", "96k") or "96k")
 
     # Initialize Logger
     if not log_file:
-        out_dir = os.path.dirname(os.path.abspath(output_path)) if output_path else _src_dir
+        out_dir = os.path.dirname(os.path.abspath(
+            output_path)) if output_path else _src_dir
         logs_dir = os.path.join(out_dir, "logs")
         os.makedirs(logs_dir, exist_ok=True)
         ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -214,9 +227,14 @@ def run_job(spec):
     logger.info(f"Video Input: {video_path}")
     logger.info(f"SRT Input: {srt_path}")
     logger.info(f"Output Target: {output_path}")
-    logger.info(f"Voice: {voice_id} | Pitch: {pitch} | Rate: {rate} | Echo: {eco_enabled} ({echo_intensity}%)")
-    logger.info(f"Demucs Vocal Removal: {remove_vocal} (BG: {background_percent}% | Voice: {ai_voice_percent}%)")
-    logger.info(f"Auto Video Speed Sync: {auto_video_sync} | Preserve Speed: {preserve_speed} | Fit Audio: {fit_audio}")
+    logger.info(
+        f"Voice: {voice_id} | Pitch: {pitch} | Rate: {rate} | Echo: {eco_enabled} ({echo_intensity}%)")
+    logger.info(
+        f"Demucs Vocal Removal: {remove_vocal} (BG: {background_percent}% | Voice: {ai_voice_percent}%)")
+    logger.info(
+        f"Auto Video Speed Sync: {auto_video_sync} | Preserve Speed: {preserve_speed} | Fit Audio: {fit_audio}")
+    logger.info(
+        f"Facebook Video Quality: {video_quality} | Compression: {'ON' if compress_enabled else 'OFF'} | CRF: {video_crf} | FastStart: {facebook_faststart}")
     logger.info(f"Log File: {log_file}")
     logger.info("=" * 60)
 
@@ -237,11 +255,13 @@ def run_job(spec):
     if timeline_segments and isinstance(timeline_segments, list):
         segments = list(timeline_segments)
         logger.progress(10, f"Loaded {len(segments)} timeline segments...")
-        logger.info(f"Loaded {len(segments)} timeline segments from specification.")
+        logger.info(
+            f"Loaded {len(segments)} timeline segments from specification.")
     elif srt_path and os.path.exists(srt_path):
         segments = parse_srt_file(srt_path)
         logger.progress(10, f"Parsed {len(segments)} SRT subtitles...")
-        logger.info(f"Parsed {len(segments)} subtitle segments from {srt_path}.")
+        logger.info(
+            f"Parsed {len(segments)} subtitle segments from {srt_path}.")
     else:
         # Need AI transcription
         logger.progress(10, "Transcribing speech with AI...")
@@ -255,18 +275,24 @@ def run_job(spec):
 
         tx_worker.progress = _DummySignal()
         tx_worker.api_key = spec.get("api_key", None)
-        segments = tx_worker.transcribe_with_gemini(video_path, tx_worker.api_key)
-        logger.progress(15, f"AI Transcription complete ({len(segments)} segments)...")
-        logger.info(f"AI Transcription completed with {len(segments)} segments.")
+        segments = tx_worker.transcribe_with_gemini(
+            video_path, tx_worker.api_key)
+        logger.progress(
+            15, f"AI Transcription complete ({len(segments)} segments)...")
+        logger.info(
+            f"AI Transcription completed with {len(segments)} segments.")
 
     if not segments:
-        logger.error(f"No subtitle segments found for {os.path.basename(video_path)}")
-        raise ValueError(f"No subtitle segments found for {os.path.basename(video_path)}")
+        logger.error(
+            f"No subtitle segments found for {os.path.basename(video_path)}")
+        raise ValueError(
+            f"No subtitle segments found for {os.path.basename(video_path)}")
 
     # Step 2: Build table data with text sanitization & adaptive speech rates
     table_data = []
     default_fallback_voice = "km-KH-SreymomNeural"
-    effective_voice_id = voice_id if (voice_id and voice_id != "__BATCH_USE_SRT_TAGS__") else default_fallback_voice
+    effective_voice_id = voice_id if (
+        voice_id and voice_id != "__BATCH_USE_SRT_TAGS__") else default_fallback_voice
 
     logger.info("--- SEGMENT TABLE & ADAPTIVE SPEECH RATE ANALYSIS ---")
     for idx, seg in enumerate(segments):
@@ -287,7 +313,8 @@ def run_job(spec):
 
         s_raw_pitch = seg.get("pitch")
         if s_raw_pitch is None or str(s_raw_pitch).strip() in ("", "0"):
-            s_raw_pitch = pitch if (pitch and str(pitch).strip() not in ("", "0")) else "+0Hz"
+            s_raw_pitch = pitch if (pitch and str(
+                pitch).strip() not in ("", "0")) else "+0Hz"
         else:
             s_raw_pitch = str(s_raw_pitch).strip()
             if not s_raw_pitch.endswith("Hz") and not s_raw_pitch.endswith("%"):
@@ -297,7 +324,8 @@ def run_job(spec):
                 except ValueError:
                     pass
 
-        s_resolved_voice, s_resolved_pitch = resolve_voice_and_pitch(s_raw_voice, s_raw_pitch)
+        s_resolved_voice, s_resolved_pitch = resolve_voice_and_pitch(
+            s_raw_voice, s_raw_pitch)
 
         # Adaptive Balanced Speech Rate (matching Single Video Export)
         available_time = max(0.1, s_end - s_start - 0.1)
@@ -339,8 +367,10 @@ def run_job(spec):
     # Step 3: Audio Analysis & Video Speed Sync (Parity with Single Video Export)
     video_to_use = video_path
     if auto_video_sync:
-        logger.progress(15, "Analyzing audio durations for video speed sync...")
-        logger.info("Initializing SegmentAudioAnalysisWorker for speech timing measurement...")
+        logger.progress(
+            15, "Analyzing audio durations for video speed sync...")
+        logger.info(
+            "Initializing SegmentAudioAnalysisWorker for speech timing measurement...")
 
         rows_data = []
         for idx, row in enumerate(table_data):
@@ -376,7 +406,8 @@ def run_job(spec):
 
         def on_analysis_done(data):
             analysis_result[0] = list(data) if data else []
-            logger.info(f"[AUDIO-ANALYSIS] Completed! Analyzed {len(analysis_result[0])} segment clips.")
+            logger.info(
+                f"[AUDIO-ANALYSIS] Completed! Analyzed {len(analysis_result[0])} segment clips.")
             app.quit()
 
         def on_analysis_err(err):
@@ -394,13 +425,21 @@ def run_job(spec):
 
         if analysis_result[0]:
             segments_data = analysis_result[0]
-            logger.progress(23, "Adjusting video speed to match speech cadence...")
-            logger.info("Initializing VideoSpeedAdjustWorker to adjust video playback speed...")
+            logger.progress(
+                23, "Adjusting video speed to match speech cadence...")
+            logger.info(
+                "Initializing VideoSpeedAdjustWorker to adjust video playback speed...")
 
             speed_worker = VideoSpeedAdjustWorker(
                 video_path=video_path,
                 segments_with_audio_duration=segments_data
             )
+            speed_worker.video_quality = video_quality
+            speed_worker.video_crf = video_crf
+            speed_worker.compress_enabled = compress_enabled
+            speed_worker.facebook_faststart = facebook_faststart
+            speed_worker.allow_upscale = allow_upscale
+            speed_worker.audio_bitrate = audio_bitrate
 
             speed_result_video = [video_path]
             speed_updated_timeline = [None]
@@ -412,16 +451,20 @@ def run_job(spec):
 
             def on_speed_progress_val(val):
                 scaled = 23 + int(val * 0.07)
-                logger.progress(scaled, f"Synchronizing video speed ({val}%)...")
+                logger.progress(
+                    scaled, f"Synchronizing video speed ({val}%)...")
 
             def on_speed_timeline_updated(new_times):
-                speed_updated_timeline[0] = list(new_times) if new_times else []
-                logger.info(f"[VIDEO-SPEED] Received synchronized timeline: {len(speed_updated_timeline[0])} rows updated.")
+                speed_updated_timeline[0] = list(
+                    new_times) if new_times else []
+                logger.info(
+                    f"[VIDEO-SPEED] Received synchronized timeline: {len(speed_updated_timeline[0])} rows updated.")
 
             def on_speed_done(adjusted_video):
                 if adjusted_video and os.path.exists(adjusted_video):
                     speed_result_video[0] = adjusted_video
-                    logger.info(f"[VIDEO-SPEED] Created speed-adjusted video: {adjusted_video}")
+                    logger.info(
+                        f"[VIDEO-SPEED] Created speed-adjusted video: {adjusted_video}")
                 app.quit()
 
             def on_speed_err(err):
@@ -443,22 +486,28 @@ def run_job(spec):
                 for item in speed_updated_timeline[0]:
                     r = item.get("row")
                     if r is not None and 0 <= r < len(table_data):
-                        if "start" in item:
-                            table_data[r]["start"] = float(item["start"])
-                        if "end" in item:
-                            table_data[r]["end"] = float(item["end"])
+                        s_val = item.get("start") if "start" in item else item.get("new_start")
+                        e_val = item.get("end") if "end" in item else item.get("new_end")
+                        if s_val is not None:
+                            table_data[r]["start"] = float(s_val)
+                        if e_val is not None:
+                            table_data[r]["end"] = float(e_val)
 
             video_to_use = speed_result_video[0]
             preserve_speed = True
             fit_audio = False
-            logger.info(f"✅ Auto Video Speed Sync successful! Video to mux: {video_to_use}")
-            logger.info(f"   Speech will play at 100% natural unaltered speed (preserve_speed={preserve_speed}, fit_audio={fit_audio}).")
+            logger.info(
+                f"✅ Auto Video Speed Sync successful! Video to mux: {video_to_use}")
+            logger.info(
+                f"   Speech will play at 100% natural unaltered speed (preserve_speed={preserve_speed}, fit_audio={fit_audio}).")
         else:
-            logger.warning("Audio analysis produced no data; falling back to speech retiming mode.")
+            logger.warning(
+                "Audio analysis produced no data; falling back to speech retiming mode.")
             preserve_speed = False
             fit_audio = True
     else:
-        logger.info(f"Auto video sync disabled by config; running direct speech retiming mode (fit_audio={fit_audio}).")
+        logger.info(
+            f"Auto video sync disabled by config; running direct speech retiming mode (fit_audio={fit_audio}).")
         preserve_speed = False
         fit_audio = True
 
@@ -468,14 +517,20 @@ def run_job(spec):
         os.makedirs(out_dir, exist_ok=True)
 
     if remove_vocal:
-        logger.progress(30, f"Exporting with Demucs vocal removal (BG: {background_percent}% | Voice: {ai_voice_percent}%)...")
-        logger.info(f"[CONFIG] Demucs vocal removal ENABLED: Background={background_percent}%, AI Voice={ai_voice_percent}%, Sync={'ON' if fit_audio else 'OFF'}")
+        logger.progress(
+            30, f"Exporting with Demucs vocal removal (BG: {background_percent}% | Voice: {ai_voice_percent}%)...")
+        logger.info(
+            f"[CONFIG] Demucs vocal removal ENABLED: Background={background_percent}%, AI Voice={ai_voice_percent}%, Sync={'ON' if fit_audio else 'OFF'}")
     elif fit_audio:
-        logger.progress(30, f"Exporting {len(table_data)} clips with Speech Timing Sync...")
-        logger.info(f"[CONFIG] Exporting {len(table_data)} clips with Speech Timing Sync (Auto-Retime: ON)...")
+        logger.progress(
+            30, f"Exporting {len(table_data)} clips with Speech Timing Sync...")
+        logger.info(
+            f"[CONFIG] Exporting {len(table_data)} clips with Speech Timing Sync (Auto-Retime: ON)...")
     else:
-        logger.progress(30, f"Exporting {len(table_data)} clips at 100% natural speech rate...")
-        logger.info(f"[CONFIG] Exporting {len(table_data)} clips at 100% natural speech rate (Auto-Retime: OFF, Video Sync: ACTIVE)...")
+        logger.progress(
+            30, f"Exporting {len(table_data)} clips at 100% natural speech rate...")
+        logger.info(
+            f"[CONFIG] Exporting {len(table_data)} clips at 100% natural speech rate (Auto-Retime: OFF, Video Sync: ACTIVE)...")
 
     # Step 4: Run ExportWorker
     worker = ExportWorker(
@@ -493,6 +548,12 @@ def run_job(spec):
     )
     worker.lock_speed_enabled = False
     worker.locked_rate = ""
+    worker.video_quality = video_quality
+    worker.video_crf = video_crf
+    worker.compress_enabled = compress_enabled
+    worker.facebook_faststart = facebook_faststart
+    worker.allow_upscale = allow_upscale
+    worker.audio_bitrate = audio_bitrate
 
     export_error = [None]
 
@@ -511,7 +572,8 @@ def run_job(spec):
 
     def on_export_finished():
         logger.progress(98, "Finalizing video file...")
-        logger.info("[EXPORT] Worker finished synthesizing, mixing, and muxing.")
+        logger.info(
+            "[EXPORT] Worker finished synthesizing, mixing, and muxing.")
         app.quit()
 
     def on_export_error(err_msg):
@@ -530,18 +592,23 @@ def run_job(spec):
         raise RuntimeError(export_error[0])
 
     if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
-        logger.error(f"Export finished but output file is missing or empty: {output_path}")
-        raise RuntimeError(f"Export finished but output file is missing or empty: {output_path}")
+        logger.error(
+            f"Export finished but output file is missing or empty: {output_path}")
+        raise RuntimeError(
+            f"Export finished but output file is missing or empty: {output_path}")
 
     file_size_mb = os.path.getsize(output_path) / (1024 * 1024)
-    logger.info(f"✅ EXPORT SUCCESSFUL! Target: {output_path} ({file_size_mb:.2f} MB)")
+    logger.info(
+        f"✅ EXPORT SUCCESSFUL! Target: {output_path} ({file_size_mb:.2f} MB)")
     logger.progress(100, "Export completed successfully!")
     print(f"DONE:{output_path}", flush=True)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="AI Dubber Batch Video Runner")
-    parser.add_argument("--job-file", required=True, help="Path to job specification JSON file")
+    parser = argparse.ArgumentParser(
+        description="AI Dubber Batch Video Runner")
+    parser.add_argument("--job-file", required=True,
+                        help="Path to job specification JSON file")
     args = parser.parse_args()
 
     if not os.path.exists(args.job_file):

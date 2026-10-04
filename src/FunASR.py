@@ -54,7 +54,8 @@ class FunASRConfig:
     punc_model: Optional[str] = "ct-punc"
     spk_model: Optional[str] = None
     device: str = "cpu"
-    model_hub: Optional[str] = None  # e.g. "ms" (ModelScope) or "hf" (HuggingFace)
+    # e.g. "ms" (ModelScope) or "hf" (HuggingFace)
+    model_hub: Optional[str] = None
     download_dir: Optional[str] = None  # where to cache model repos (optional)
     vad_max_single_segment_ms: int = 30000  # VAD max segment length (ms)
 
@@ -139,10 +140,12 @@ def _snapshot_download_with_progress(repo_id: str, local_dir: str, progress_call
                 percent = int(round((float(current) / float(total)) * 100.0))
                 if percent != self._last_percent:
                     self._last_percent = percent
-                    _emit_progress(progress_callback, percent, f"Downloading {label}: {percent}%")
+                    _emit_progress(progress_callback, percent,
+                                   f"Downloading {label}: {percent}%")
             return out
 
-    _emit_progress(progress_callback, 1, f"Preparing download for {label}: {repo_id}")
+    _emit_progress(progress_callback, 1,
+                   f"Preparing download for {label}: {repo_id}")
 
     token = os.environ.get("HF_TOKEN") or None
     path = snapshot_download(
@@ -178,13 +181,16 @@ def _ensure_models_downloaded(cfg: FunASRConfig, progress_callback=None) -> None
         except Exception:
             download_root = ""
     if not download_root:
-        download_root = os.path.join(tempfile.gettempdir(), "aidubber_funasr_models")
+        download_root = os.path.join(
+            tempfile.gettempdir(), "aidubber_funasr_models")
     os.makedirs(download_root, exist_ok=True)
 
     # Help downstream libraries (FunASR / HF hub / transformers) reuse the same cache.
     os.environ.setdefault("HF_HOME", download_root)
-    os.environ.setdefault("HUGGINGFACE_HUB_CACHE", os.path.join(download_root, "hub"))
-    os.environ.setdefault("TRANSFORMERS_CACHE", os.path.join(download_root, "transformers"))
+    os.environ.setdefault("HUGGINGFACE_HUB_CACHE",
+                          os.path.join(download_root, "hub"))
+    os.environ.setdefault("TRANSFORMERS_CACHE", os.path.join(
+        download_root, "transformers"))
 
     def needs_download(name: str) -> Tuple[bool, str, str]:
         if not name or _is_probably_local_path(name):
@@ -214,7 +220,8 @@ def _ensure_models_downloaded(cfg: FunASRConfig, progress_callback=None) -> None
             _emit_progress(progress_callback, 5, f"{label} already cached.")
 
     if not downloads:
-        _emit_progress(progress_callback, 25, "✅ Local TSB models already cached (download complete).")
+        _emit_progress(progress_callback, 25,
+                       "✅ Local TSB models already cached (download complete).")
         return
 
     base_percent = 0
@@ -235,12 +242,14 @@ def _ensure_models_downloaded(cfg: FunASRConfig, progress_callback=None) -> None
             message = msg or f"Downloading {label}: {pct_int}%"
             _emit_progress(progress_callback, overall, message)
 
-        _snapshot_download_with_progress(repo_id, local_dir, progress_callback=scaled_callback, label=label)
+        _snapshot_download_with_progress(
+            repo_id, local_dir, progress_callback=scaled_callback, label=label)
 
     for idx, (repo_id, local_dir, label) in enumerate(downloads):
         download_one(repo_id, local_dir, label, idx)
 
-    _emit_progress(progress_callback, 25, "✅ Download complete. Initializing Local TSB...")
+    _emit_progress(progress_callback, 25,
+                   "✅ Download complete. Initializing Local TSB...")
 
 
 def _local_dir_for_repo(download_root: str, repo_id: str) -> str:
@@ -265,7 +274,8 @@ def _resolve_to_cached_path(cfg: FunASRConfig, model_name_or_path: Optional[str]
         except Exception:
             download_root = ""
     if not download_root:
-        download_root = os.path.join(tempfile.gettempdir(), "aidubber_funasr_models")
+        download_root = os.path.join(
+            tempfile.gettempdir(), "aidubber_funasr_models")
 
     repo_id = _resolve_hf_repo_id(raw)
     local_dir = _local_dir_for_repo(download_root, repo_id)
@@ -301,16 +311,20 @@ def _get_or_create_model(cfg: FunASRConfig, *, progress_callback=None) -> Any:
         except Exception:
             from funasr import AutoModel  # type: ignore
         import_seconds = int(round(time.perf_counter() - import_started))
-        _emit_progress(progress_callback, 26, f"Local TSB: import ready ({import_seconds}s).")
+        _emit_progress(progress_callback, 26,
+                       f"Local TSB: import ready ({import_seconds}s).")
     except Exception as e:  # pragma: no cover
         raise ImportError(
             "FunASR is not installed. Install it in your environment first, e.g. `pip install -U funasr`."
         ) from e
 
     asr_model = _resolve_to_cached_path(cfg, cfg.asr_model) or cfg.asr_model
-    vad_model = _resolve_to_cached_path(cfg, cfg.vad_model) if cfg.vad_model else None
-    punc_model = _resolve_to_cached_path(cfg, cfg.punc_model) if cfg.punc_model else None
-    spk_model = _resolve_to_cached_path(cfg, cfg.spk_model) if cfg.spk_model else None
+    vad_model = _resolve_to_cached_path(
+        cfg, cfg.vad_model) if cfg.vad_model else None
+    punc_model = _resolve_to_cached_path(
+        cfg, cfg.punc_model) if cfg.punc_model else None
+    spk_model = _resolve_to_cached_path(
+        cfg, cfg.spk_model) if cfg.spk_model else None
 
     kwargs: Dict[str, Any] = {"model": asr_model}
     if vad_model:
@@ -331,7 +345,8 @@ def _get_or_create_model(cfg: FunASRConfig, *, progress_callback=None) -> Any:
     kwargs["disable_update"] = True
 
     try:
-        _emit_progress(progress_callback, 26, "Local TSB: loading model weights...")
+        _emit_progress(progress_callback, 26,
+                       "Local TSB: loading model weights...")
         model = AutoModel(**kwargs)
     except TypeError:
         # Fallback for older versions without `device`/`model_hub` kwargs.
@@ -348,7 +363,8 @@ def _get_or_create_model(cfg: FunASRConfig, *, progress_callback=None) -> Any:
 def _get_or_create_vad_model(cfg: FunASRConfig, *, progress_callback=None) -> Any:
     """Create a standalone VAD model (fsmn-vad) that returns [[beg_ms, end_ms], ...]."""
     vad_name = (cfg.vad_model or "").strip() or "fsmn-vad"
-    cache_key = (vad_name, str(cfg.device or "cpu"), str(cfg.model_hub or ""), str(cfg.download_dir or ""))
+    cache_key = (vad_name, str(cfg.device or "cpu"), str(
+        cfg.model_hub or ""), str(cfg.download_dir or ""))
     cached = _VAD_CACHE.get(cache_key)
     if cached is not None:
         return cached
@@ -361,12 +377,14 @@ def _get_or_create_vad_model(cfg: FunASRConfig, *, progress_callback=None) -> An
         except Exception:
             from funasr import AutoModel  # type: ignore
         import_seconds = int(round(time.perf_counter() - import_started))
-        _emit_progress(progress_callback, 26, f"Local TSB: VAD ready ({import_seconds}s).")
+        _emit_progress(progress_callback, 26,
+                       f"Local TSB: VAD ready ({import_seconds}s).")
     except Exception as e:
         raise ImportError("FunASR is not installed for VAD.") from e
 
     model_id = _resolve_to_cached_path(cfg, vad_name) or vad_name
-    kwargs: Dict[str, Any] = {"model": model_id, "device": cfg.device, "disable_update": True}
+    kwargs: Dict[str, Any] = {"model": model_id,
+                              "device": cfg.device, "disable_update": True}
     if cfg.model_hub:
         kwargs["model_hub"] = cfg.model_hub
     try:
@@ -406,8 +424,10 @@ def _iter_sentence_items(result_item: Dict[str, Any]) -> Iterable[Tuple[Optional
     # Fallback: word timestamps -> derive segment bounds.
     timestamps = result_item.get("timestamp")
     if isinstance(timestamps, list) and timestamps:
-        first = timestamps[0] if isinstance(timestamps[0], list) and len(timestamps[0]) >= 2 else None
-        last = timestamps[-1] if isinstance(timestamps[-1], list) and len(timestamps[-1]) >= 2 else None
+        first = timestamps[0] if isinstance(
+            timestamps[0], list) and len(timestamps[0]) >= 2 else None
+        last = timestamps[-1] if isinstance(timestamps[-1],
+                                            list) and len(timestamps[-1]) >= 2 else None
         start_s = _ms_to_s(first[0]) if first else None
         end_s = _ms_to_s(last[1]) if last else None
         text = _sanitize_text(result_item.get("text"))
@@ -471,7 +491,8 @@ def _append_segments_with_boundary_fallback(
     if not found_text and isinstance(result, list) and result and isinstance(result[0], dict):
         fallback_text = _sanitize_text(result[0].get("text"))
         if fallback_text:
-            output.append({"start": boundary_start, "end": boundary_end, "text": fallback_text})
+            output.append({"start": boundary_start,
+                          "end": boundary_end, "text": fallback_text})
 
 
 def transcribe_audio_to_segments(
@@ -516,7 +537,8 @@ def transcribe_audio_to_segments(
                 )
             except Exception as e:
                 # Fall back to coarse chunking when VAD path fails, but surface a hint for debugging.
-                _emit_progress(progress_callback, 28, f"Local TSB: VAD timing failed; falling back to chunking ({type(e).__name__}).")
+                _emit_progress(
+                    progress_callback, 28, f"Local TSB: VAD timing failed; falling back to chunking ({type(e).__name__}).")
 
     stop_event = threading.Event()
 
@@ -532,7 +554,8 @@ def transcribe_audio_to_segments(
 
     hb_thread = None
     try:
-        hb_thread = threading.Thread(target=heartbeat, name="funasr-init-heartbeat", daemon=True)
+        hb_thread = threading.Thread(
+            target=heartbeat, name="funasr-init-heartbeat", daemon=True)
         hb_thread.start()
     except Exception:
         hb_thread = None
@@ -642,7 +665,8 @@ def _normalize_vad_segments(vad_output: Any) -> List[Tuple[int, int]]:
             for pair in vad_output:
                 add_pair(pair)
         elif isinstance(vad_output[0], dict):
-            payload = vad_output[0].get("value") or vad_output[0].get("segments") or vad_output[0].get("vad") or None
+            payload = vad_output[0].get("value") or vad_output[0].get(
+                "segments") or vad_output[0].get("vad") or None
             if isinstance(payload, list):
                 for pair in payload:
                     add_pair(pair)
@@ -665,13 +689,16 @@ def _transcribe_wav_with_vad_segments(
       3) Run ASR without VAD (avoid VAD pipeline timestamp KeyError)
       4) Offset timestamps by VAD begin time
     """
-    _emit_progress(progress_callback, 26, "Local TSB: running VAD for timing...")
-    vad_model = _get_or_create_vad_model(cfg, progress_callback=progress_callback)
+    _emit_progress(progress_callback, 26,
+                   "Local TSB: running VAD for timing...")
+    vad_model = _get_or_create_vad_model(
+        cfg, progress_callback=progress_callback)
 
     vad_res = vad_model.generate(input=wav_path)
     vad_segments = _normalize_vad_segments(vad_res)
     if not vad_segments:
-        _emit_progress(progress_callback, 28, "Local TSB: no speech detected by VAD.")
+        _emit_progress(progress_callback, 28,
+                       "Local TSB: no speech detected by VAD.")
         return []
 
     # Free VAD model before loading ASR model to prevent GPU VRAM exhaustion!
@@ -695,12 +722,14 @@ def _transcribe_wav_with_vad_segments(
         download_dir=cfg.download_dir,
         vad_max_single_segment_ms=cfg.vad_max_single_segment_ms,
     )
-    asr_model = _get_or_create_model(asr_only_cfg, progress_callback=progress_callback)
+    asr_model = _get_or_create_model(
+        asr_only_cfg, progress_callback=progress_callback)
 
     with contextlib.closing(wave.open(wav_path, "rb")) as wf:
         rate = wf.getframerate() or 16000
 
-    tmp_dir = ensure_tmp_dir = os.path.join(os.path.dirname(wav_path), "temp_funasr_vad")
+    tmp_dir = ensure_tmp_dir = os.path.join(
+        os.path.dirname(wav_path), "temp_funasr_vad")
     os.makedirs(tmp_dir, exist_ok=True)
 
     out_segments: List[Dict[str, Any]] = []
@@ -716,14 +745,18 @@ def _transcribe_wav_with_vad_segments(
             cursor = sub_end
 
         for sub_idx, (sub_beg, sub_end) in enumerate(sub_ranges):
-            percent = int(round(30 + (55.0 * ((idx + (sub_idx / max(1, len(sub_ranges)))) / max(1, total)))))
-            _emit_progress(progress_callback, percent, f"Local TSB: segment {idx+1}/{total}...")
+            percent = int(round(
+                30 + (55.0 * ((idx + (sub_idx / max(1, len(sub_ranges)))) / max(1, total)))))
+            _emit_progress(progress_callback, percent,
+                           f"Local TSB: segment {idx+1}/{total}...")
 
             start_frame = int((sub_beg / 1000.0) * rate)
             end_frame = int((sub_end / 1000.0) * rate)
             frame_count = max(0, end_frame - start_frame)
-            slice_path = os.path.join(tmp_dir, f"vad_{idx:04d}_{sub_idx:02d}.wav")
-            _write_wav_slice(wav_path, slice_path, start_frame=start_frame, frame_count=frame_count)
+            slice_path = os.path.join(
+                tmp_dir, f"vad_{idx:04d}_{sub_idx:02d}.wav")
+            _write_wav_slice(wav_path, slice_path,
+                             start_frame=start_frame, frame_count=frame_count)
 
             try:
                 try:
@@ -754,7 +787,8 @@ def _transcribe_wav_with_vad_segments(
     if not out_segments:
         return []
 
-    out_segments.sort(key=lambda s: (float(s.get("start", 0.0) or 0.0), float(s.get("end", 0.0) or 0.0)))
+    out_segments.sort(key=lambda s: (
+        float(s.get("start", 0.0) or 0.0), float(s.get("end", 0.0) or 0.0)))
     last_end = 0.0
     for seg in out_segments:
         start = float(seg.get("start", 0.0) or 0.0)
@@ -824,21 +858,25 @@ def _transcribe_wav_chunked(
         if chunk_start_frame >= total_frames:
             break
 
-        chunk_end_frame = min(total_frames, (chunk_index + 1) * frames_per_chunk)
+        chunk_end_frame = min(
+            total_frames, (chunk_index + 1) * frames_per_chunk)
         chunk_frame_count = max(0, chunk_end_frame - chunk_start_frame)
         chunk_start_s = float(chunk_start_frame) / float(rate)
         chunk_end_s = float(chunk_end_frame) / float(rate)
 
         # Progress range reserved for chunk loop: ~30% -> ~85%
-        percent = int(round(30 + (55.0 * (chunk_index / max(1, total_chunks)))))
+        percent = int(
+            round(30 + (55.0 * (chunk_index / max(1, total_chunks)))))
         if progress_callback:
             try:
-                progress_callback(percent, f"Local TSB: {chunk_index+1}/{total_chunks} chunks... ({percent}%)")
+                progress_callback(
+                    percent, f"Local TSB: {chunk_index+1}/{total_chunks} chunks... ({percent}%)")
             except Exception:
                 pass
 
         chunk_path = os.path.join(tmp_dir, f"chunk_{chunk_index:04d}.wav")
-        _write_wav_slice(wav_path, chunk_path, start_frame=chunk_start_frame, frame_count=chunk_frame_count)
+        _write_wav_slice(
+            wav_path, chunk_path, start_frame=chunk_start_frame, frame_count=chunk_frame_count)
 
         try:
             res, model = _funasr_generate_with_fallback(
@@ -870,7 +908,8 @@ def _transcribe_wav_chunked(
     if not out_segments:
         return []
 
-    out_segments.sort(key=lambda s: (float(s.get("start", 0.0) or 0.0), float(s.get("end", 0.0) or 0.0)))
+    out_segments.sort(key=lambda s: (
+        float(s.get("start", 0.0) or 0.0), float(s.get("end", 0.0) or 0.0)))
     last_end = 0.0
     for seg in out_segments:
         start = float(seg.get("start", 0.0) or 0.0)
@@ -920,7 +959,8 @@ def _funasr_generate_with_fallback(
 
         # Fallback: disable VAD/PUNC if present to avoid inference_with_vad() path.
         if cfg.vad_model or cfg.punc_model:
-            _emit_progress(progress_callback, 30, "Local TSB: VAD timestamps missing; retrying without VAD/PUNC...")
+            _emit_progress(
+                progress_callback, 30, "Local TSB: VAD timestamps missing; retrying without VAD/PUNC...")
             fallback_cfg = FunASRConfig(
                 asr_model=cfg.asr_model,
                 vad_model=None,
@@ -930,7 +970,8 @@ def _funasr_generate_with_fallback(
                 model_hub=cfg.model_hub,
                 download_dir=cfg.download_dir,
             )
-            fallback_model = _get_or_create_model(fallback_cfg, progress_callback=progress_callback)
+            fallback_model = _get_or_create_model(
+                fallback_cfg, progress_callback=progress_callback)
             try:
                 return (
                     fallback_model.generate(
