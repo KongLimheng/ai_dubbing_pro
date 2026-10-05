@@ -306,7 +306,7 @@ class DramaboxDownloader(YouTubeMixin, FacebookMixin):
             raise RuntimeError(
                 error_text[-1] if error_text else 'ffmpeg remux failed')
 
-    def download_file(self, url, dest_path, label='episode', progress_callback=None, cancel_check=None):
+    def download_file(self, url, dest_path, label='episode', progress_callback=None, cancel_check=None, choice=None, info_json_path=None):
         if not url:
             raise RuntimeError('No media URL supplied')
         self.reset()
@@ -314,7 +314,7 @@ class DramaboxDownloader(YouTubeMixin, FacebookMixin):
         os.makedirs(dest_dir, exist_ok=True)
 
         if self.portable_video.can_handle(url):
-            return self.portable_video.download(url, dest_path, label)
+            return self.portable_video.download(url, dest_path, label, choice=choice, info_json_path=info_json_path)
 
         if url.startswith('youtube-ytdlp://'):
             if not hasattr(self, '_youtube_download_episode'):

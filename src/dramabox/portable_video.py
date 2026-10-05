@@ -14,6 +14,14 @@ if os.path.isdir(os.path.join(VENDOR_ROOT, "yt_dlp")) and VENDOR_ROOT not in sys
     sys.path.insert(0, VENDOR_ROOT)
 
 try:
+    from . import yoinks_engine
+except ImportError:
+    try:
+        import yoinks_engine
+    except ImportError:
+        yoinks_engine = None
+
+try:
     from yt_dlp import YoutubeDL
 except ImportError:
     YoutubeDL = None
@@ -66,6 +74,8 @@ class PortableVideoSupport:
 
     @property
     def available(self) -> bool:
+        if yoinks_engine and yoinks_engine.BinaryResolver.resolve_ytdlp():
+            return True
         return YoutubeDL is not None
 
     def build_managed_url(self, url: str) -> str:
@@ -102,12 +112,97 @@ class PortableVideoSupport:
         )
 
     def get_youtube_info(self, url: str) -> dict:
+        source_url = self.unwrap_managed_url(url)
+        if yoinks_engine and yoinks_engine.BinaryResolver.resolve_ytdlp():
+            try:
+                yt_info = yoinks_engine.parse_youtube_url(source_url)
+                is_pl = yt_info.has_playlist and not yt_info.has_video
+                res = yoinks_engine.probe_playlist(source_url) if is_pl else yoinks_engine.probe_video(source_url)
+                episodes = [
+                    {
+                        "id": e.id,
+                        "num": e.index,
+                        "title": e.title,
+                        "url": e.url or source_url,
+                        "duration": e.duration,
+                        "locked": False,
+                        "resolved_url": self.build_managed_url(e.url or source_url),
+                    }
+                    for e in (
+                        res.info.entries
+                        if res.info.is_playlist
+                        else [
+                            yoinks_engine.PlaylistEntry(
+                                id=res.info.id,
+                                title=res.info.title,
+                                duration=res.info.duration,
+                                url=source_url,
+                                index=1,
+                            )
+                        ]
+                    )
+                ]
+                return {
+                    "title": res.info.title,
+                    "episodes": episodes,
+                    "thumbnail": res.info.thumbnail,
+                    "choices": res.choices,
+                    "info_json_path": res.info_json_path,
+                }
+            except Exception as e:
+                self._report(f"Yoinks YouTube probe failed, falling back: {e}")
         return self._extract_platform_info(url, "YouTube")
 
     def get_facebook_info(self, url: str) -> dict:
+        source_url = self.unwrap_managed_url(url)
+        if yoinks_engine and yoinks_engine.BinaryResolver.resolve_ytdlp():
+            try:
+                res = yoinks_engine.probe_video(source_url)
+                return {
+                    "title": res.info.title,
+                    "episodes": [
+                        {
+                            "id": res.info.id or source_url,
+                            "num": 1,
+                            "title": res.info.title,
+                            "url": source_url,
+                            "duration": res.info.duration,
+                            "locked": False,
+                            "resolved_url": self.build_managed_url(source_url),
+                        }
+                    ],
+                    "thumbnail": res.info.thumbnail,
+                    "choices": res.choices,
+                    "info_json_path": res.info_json_path,
+                }
+            except Exception as e:
+                self._report(f"Yoinks Facebook probe failed, falling back: {e}")
         return self._extract_platform_info(url, "Facebook")
 
     def get_tiktok_info(self, url: str) -> dict:
+        source_url = self.unwrap_managed_url(url)
+        if yoinks_engine and yoinks_engine.BinaryResolver.resolve_ytdlp():
+            try:
+                res = yoinks_engine.probe_video(source_url)
+                return {
+                    "title": res.info.title,
+                    "episodes": [
+                        {
+                            "id": res.info.id or source_url,
+                            "num": 1,
+                            "title": res.info.title,
+                            "url": source_url,
+                            "duration": res.info.duration,
+                            "locked": False,
+                            "resolved_url": self.build_managed_url(source_url),
+                        }
+                    ],
+                    "thumbnail": res.info.thumbnail,
+                    "choices": res.choices,
+                    "info_json_path": res.info_json_path,
+                }
+            except Exception as e:
+                self._report(f"Yoinks TikTok probe failed, falling back: {e}")
         return self._extract_platform_info(url, "TikTok")
 
     def get_reelshort_info(self, url: str) -> dict:
@@ -135,7 +230,7 @@ class PortableVideoSupport:
         direct_url = self._extract_direct_media_url(clean)
         return direct_url if direct_url else self.build_managed_url(clean)
 
-    def download(self, url: str, dest_path: str, label: str = "") -> str:
+    def download(self, url: str, dest_path: str, label: str = "", choice=None, info_json_path=None) -> str:
         if not self.available:
             raise RuntimeError("yt-dlp support is unavailable")
         source_url = self.unwrap_managed_url(url)
@@ -143,8 +238,31 @@ class PortableVideoSupport:
             raise RuntimeError("No platform URL supplied")
 
         target_label = label if label else "media"
-        self._report(f"Downloading {target_label} with portable yt-dlp...")
+        self._report(f"Downloading {target_label} with yoinks yt-dlp...")
         self._progress(0)
+
+        if yoinks_engine and yoinks_engine.BinaryResolver.resolve_ytdlp():
+            dest_dir = os.path.dirname(dest_path) or "."
+            if not choice:
+                choice = yoinks_engine.DownloadChoice(
+                    kind="video",
+                    label="best quality · mp4",
+                    args=["-f", "bv*+ba/b", "--merge-output-format", "mp4"],
+                )
+
+            def _on_prog(p):
+                if p.percent is not None:
+                    self._progress(int(p.percent))
+
+            saved = yoinks_engine.execute_download(
+                source_url,
+                choice,
+                dest_dir,
+                info_json_path=info_json_path,
+                progress_callback=_on_prog,
+            )
+            self._progress(100)
+            return saved
 
         outtmpl = os.path.splitext(dest_path)[0] + ".%(ext)s"
         opts = self._make_options(source_url, download=True)

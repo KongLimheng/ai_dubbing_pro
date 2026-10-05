@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=AI Dubber Ultimate
+GenericName=AI Video Dubber & Downloader
+Comment=AI-Powered Dubbing and Multi-Platform Video Processing Suite
+Exec=bash -c 'cd "$(dirname "%k")" && ./run.sh'
+Icon=resources/icon.png
+Terminal=false
+Categories=AudioVideo;AudioVideoEditing;Video;
+StartupNotify=true
+StartupWMClass=AI Dubber Ultimate

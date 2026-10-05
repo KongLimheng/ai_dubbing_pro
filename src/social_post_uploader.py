@@ -112,7 +112,10 @@ def build_bulk_video_title(base_title: str, video_path: str, index: int) -> str:
     tokens = ("{filename}", "{episode}", "{ep}", "{index}")
     if any(k in clean_base for k in tokens):
         t = clean_base
+        t = t.replace("{filename}", stem)
+        t = t.replace("{episode}", str(ep_num))
         t = t.replace("{ep}", str(ep_num))
+        t = t.replace("{index}", str(index))
         return t.strip()
 
     # If stem is empty, return base_title
@@ -149,6 +152,10 @@ def build_bulk_video_description(base_desc: str, video_title: str, video_path: s
     if clean_desc and any(k in clean_desc for k in tokens):
         d = clean_desc
         d = d.replace("{title}", clean_title)
+        d = d.replace("{filename}", stem)
+        d = d.replace("{episode}", str(ep_num))
+        d = d.replace("{ep}", str(ep_num))
+        d = d.replace("{index}", str(index))
         return d.strip()
 
     if clean_title:
@@ -1964,10 +1971,23 @@ class SocialUploadWorker(QThread):
                     single_summary["success_count"] += 1
                     single_summary["results"][platform] = res
                     vid_url = res.get("url", "")
+                    res_status = str(res.get("status", "")).lower()
+                    if res_status == "scheduled":
+                        sched_ts = res.get("scheduled_publish_time")
+                        if sched_ts:
+                            dt_str = time.strftime('%Y-%m-%d %H:%M', time.localtime(int(sched_ts)))
+                            succ_msg = f"Scheduled for {dt_str}"
+                        else:
+                            succ_msg = "Scheduled Publicly"
+                    elif res_status == "draft":
+                        succ_msg = "Saved as Draft"
+                    else:
+                        succ_msg = "Upload Succeeded!"
+
                     self.platform_completed.emit(
-                        platform, True, "Upload Succeeded!", vid_url)
+                        platform, True, succ_msg, vid_url)
                     self.log_message.emit(
-                        "SUCCESS", f"[{platform.upper()}] Success for {v_name}! Link: {vid_url}")
+                        "SUCCESS", f"[{platform.upper()}] {succ_msg} for {v_name}! Link: {vid_url}")
 
                 except Exception as e:
                     err_msg = str(e)

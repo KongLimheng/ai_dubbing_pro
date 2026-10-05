@@ -1,0 +1,330 @@
+name: Cross-Platform Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      draft:
+        description: 'Publish release as draft'
+        type: boolean
+        required: false
+        default: false
+      prerelease:
+        description: 'Publish release as pre-release'
+        type: boolean
+        required: false
+        default: false
+      build_frozen:
+        description: 'Build standalone PyInstaller binaries in addition to portable'
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  # ── 1. Quality Gate ──────────────────────────────────────────────────────────
+  test:
+    name: Quality Gate & Tests (Ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg libgl1-mesa-glx libegl1-mesa libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xfixes0 libxcb-shape0
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python 3.11
+        run: uv python install 3.11
+
+      - name: Install Requirements
+        run: |
+          uv venv --python 3.11
+          uv pip install -r requirements.txt
+
+      - name: Run Unit Tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+          PYTHONPATH: src
+        run: |
+          source .venv/bin/activate
+          python -m unittest tests/test_yoinks_downloader.py
+
+  # ── 2. Portable Distribution Packages ───────────────────────────────────────
+  package-portable:
+    name: Package Portable (${{ matrix.platform }})
+    needs: [test]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Windows
+            os: windows-latest
+            archive_ext: zip
+          - platform: Linux
+            os: ubuntu-latest
+            archive_ext: tar.gz
+          - platform: macOS
+            os: macos-latest
+            archive_ext: tar.gz
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Determine Version Tag
+        id: vars
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [ -z "$TAG" ] || [ "$TAG" = "main" ]; then
+            TAG="v1.2.9-snapshot"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Assemble Portable Bundle Directory
+        shell: bash
+        run: |
+          BUNDLE_DIR="AI-Dubber-Ultimate-${{ steps.vars.outputs.tag }}-${{ matrix.platform }}-Portable"
+          mkdir -p "$BUNDLE_DIR"
+
+          # Copy core application directories and files
+          cp -r src "$BUNDLE_DIR/"
+          cp -r resources "$BUNDLE_DIR/"
+          cp -r config "$BUNDLE_DIR/"
+          cp data.json "$BUNDLE_DIR/"
+          cp runtime_packages.json "$BUNDLE_DIR/"
+          cp requirements.txt "$BUNDLE_DIR/"
+          cp pyproject.toml "$BUNDLE_DIR/"
+          cp README.md "$BUNDLE_DIR/" 2>/dev/null || true
+
+          # Platform-specific launchers
+          if [ "${{ matrix.platform }}" = "Windows" ]; then
+            cp run.bat "$BUNDLE_DIR/"
+          else
+            cp run.sh "$BUNDLE_DIR/"
+            chmod +x "$BUNDLE_DIR/run.sh"
+            if [ -f "resources/ai-dubber-ultimate.desktop" ]; then
+              cp resources/ai-dubber-ultimate.desktop "$BUNDLE_DIR/"
+            fi
+          fi
+
+          # Clean up temporary caches and editor artifacts
+          find "$BUNDLE_DIR" -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+          find "$BUNDLE_DIR" -name "*.pyo" -delete 2>/dev/null || true
+          find "$BUNDLE_DIR" -name ".DS_Store" -delete 2>/dev/null || true
+
+      - name: Create Archive (Windows ZIP)
+        if: matrix.platform == 'Windows'
+        shell: bash
+        run: |
+          BUNDLE_DIR="AI-Dubber-Ultimate-${{ steps.vars.outputs.tag }}-${{ matrix.platform }}-Portable"
+          ARCHIVE_NAME="${BUNDLE_DIR}.zip"
+          7z a -tzip -mx=9 "$ARCHIVE_NAME" "$BUNDLE_DIR"
+          echo "ARCHIVE_PATH=$ARCHIVE_NAME" >> $GITHUB_ENV
+
+      - name: Create Archive (Linux/macOS TAR.GZ)
+        if: matrix.platform != 'Windows'
+        shell: bash
+        run: |
+          BUNDLE_DIR="AI-Dubber-Ultimate-${{ steps.vars.outputs.tag }}-${{ matrix.platform }}-Portable"
+          ARCHIVE_NAME="${BUNDLE_DIR}.tar.gz"
+          tar -czf "$ARCHIVE_NAME" "$BUNDLE_DIR"
+          echo "ARCHIVE_PATH=$ARCHIVE_NAME" >> $GITHUB_ENV
+
+      - name: Upload Portable Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: portable-${{ matrix.platform }}
+          path: ${{ env.ARCHIVE_PATH }}
+          if-no-files-found: error
+
+  # ── 3. Standalone Frozen Binaries (PyInstaller) ─────────────────────────────
+  package-frozen:
+    name: Package Frozen Binary (${{ matrix.platform }})
+    needs: [test]
+    if: github.event_name == 'push' || github.event.inputs.build_frozen != 'false'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Windows
+            os: windows-latest
+            archive_ext: zip
+          - platform: Linux
+            os: ubuntu-22.04
+            archive_ext: tar.gz
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Determine Version Tag
+        id: vars
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [ -z "$TAG" ] || [ "$TAG" = "main" ]; then
+            TAG="v1.2.9-snapshot"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Install System Dependencies (Linux)
+        if: matrix.platform == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg libgl1-mesa-glx libegl1-mesa libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xfixes0 libxcb-shape0
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python 3.11
+        run: uv python install 3.11
+
+      - name: Install Requirements & PyInstaller
+        run: |
+          uv venv --python 3.11
+          uv pip install -r requirements.txt pyinstaller
+
+      - name: Build Standalone with PyInstaller
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            source .venv/Scripts/activate
+          else
+            source .venv/bin/activate
+          fi
+          pyinstaller --noconfirm packaging/ai_dubber.spec
+
+      - name: Post-process & Bundle (Linux Desktop integration)
+        if: matrix.platform == 'Linux'
+        shell: bash
+        run: |
+          if [ -f "resources/ai-dubber-ultimate.desktop" ]; then
+            cp resources/ai-dubber-ultimate.desktop dist/AI_Dubber_Ultimate/
+          fi
+          if [ -f "resources/icon.png" ]; then
+            cp resources/icon.png dist/AI_Dubber_Ultimate/
+          fi
+
+      - name: Create Frozen Archive (Windows ZIP)
+        if: matrix.platform == 'Windows'
+        shell: bash
+        run: |
+          ARCHIVE_NAME="AI-Dubber-Ultimate-${{ steps.vars.outputs.tag }}-Windows-x64.zip"
+          7z a -tzip -mx=9 "$ARCHIVE_NAME" ./dist/AI_Dubber_Ultimate
+          echo "FROZEN_ARCHIVE=$ARCHIVE_NAME" >> $GITHUB_ENV
+
+      - name: Create Frozen Archive (Linux TAR.GZ)
+        if: matrix.platform == 'Linux'
+        shell: bash
+        run: |
+          ARCHIVE_NAME="AI-Dubber-Ultimate-${{ steps.vars.outputs.tag }}-Linux-x64.tar.gz"
+          tar -czf "$ARCHIVE_NAME" -C dist AI_Dubber_Ultimate
+          echo "FROZEN_ARCHIVE=$ARCHIVE_NAME" >> $GITHUB_ENV
+
+      - name: Upload Frozen Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frozen-${{ matrix.platform }}
+          path: ${{ env.FROZEN_ARCHIVE }}
+          if-no-files-found: error
+
+  # ── 4. Publish GitHub Release ───────────────────────────────────────────────
+  publish-release:
+    name: Publish GitHub Release
+    needs: [test, package-portable, package-frozen]
+    runs-on: ubuntu-latest
+    if: always() && needs.test.result == 'success' && (needs.package-portable.result == 'success' || needs.package-frozen.result == 'success')
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Determine Release Tag
+        id: release_info
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [ -z "$TAG" ] || [ "$TAG" = "main" ]; then
+            TAG="v1.2.9-snapshot"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Download All Release Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-downloads
+
+      - name: Flatten Artifacts & Generate Checksums
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          find release-downloads -type f \( -name "*.zip" -o -name "*.tar.gz" \) -exec cp {} release-assets/ \;
+
+          cd release-assets
+          echo "### Release Assets SHA-256 Checksums" > SHA256SUMS.txt
+          echo "" >> SHA256SUMS.txt
+          sha256sum *.* >> SHA256SUMS.txt || true
+          cat SHA256SUMS.txt
+
+      - name: Prepare Release Notes Body
+        shell: bash
+        run: |
+          cat << 'EOF' > release_body.md
+          ## 🎙️ AI Dubber Ultimate Desktop Release
+
+          Welcome to the official cross-platform release of **AI Dubber Ultimate**!
+
+          ### 📦 Download Packages
+
+          #### 🪟 Windows
+          - **Standalone Executable (No Python needed)**: `AI-Dubber-Ultimate-*-Windows-x64.zip`
+            - Extract and double-click `AI_Dubber_Ultimate.exe`.
+          - **Portable Python Bundle**: `AI-Dubber-Ultimate-*-Windows-Portable.zip`
+            - Extract and double-click `run.bat` (auto-bootstraps environment).
+
+          #### 🐧 Linux (Ubuntu / Debian / Fedora / Arch)
+          - **Standalone Executable**: `AI-Dubber-Ultimate-*-Linux-x64.tar.gz`
+            - Extract and launch `./AI_Dubber_Ultimate`.
+          - **Portable Python Bundle**: `AI-Dubber-Ultimate-*-Linux-Portable.tar.gz`
+            - Extract and run `./run.sh`.
+
+          #### 🍏 macOS (Intel & Apple Silicon)
+          - **Portable Python Bundle**: `AI-Dubber-Ultimate-*-macOS-Portable.tar.gz`
+            - Extract and run `./run.sh` from Terminal.
+
+          ---
+
+          ### 🔐 Checksums & Integrity
+          Verify the integrity of downloaded files with the included `SHA256SUMS.txt`.
+          EOF
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "AI Dubber Ultimate ${{ steps.release_info.outputs.tag }}"
+          tag_name: ${{ steps.release_info.outputs.tag }}
+          body_path: release_body.md
+          draft: ${{ github.event.inputs.draft || false }}
+          prerelease: ${{ github.event.inputs.prerelease || false }}
+          generate_release_notes: true
+          files: |
+            release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

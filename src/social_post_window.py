@@ -1321,12 +1321,19 @@ class SocialPostWindow(QMainWindow):
         p_row.addStretch()
         gb_plat_layout.addLayout(p_row)
 
-        # Platform specific settings in collapsible accordion or grid
-        opt_grid = QHBoxLayout()
-        opt_grid.setSpacing(8)
+        # ── 3.1 Compact Platforms Row: YouTube & TikTok side-by-side ──
+        row_yt_tt = QHBoxLayout()
+        row_yt_tt.setSpacing(12)
 
         # YouTube Options
-        yt_box = QVBoxLayout()
+        self.yt_options_container = QWidget()
+        yt_box = QVBoxLayout(self.yt_options_container)
+        yt_box.setContentsMargins(0, 0, 0, 0)
+        yt_box.setSpacing(4)
+        lbl_yt_title = QLabel("▶️ YouTube Options:")
+        lbl_yt_title.setStyleSheet(
+            "font-size: 11px; font-weight: bold; color: #8B949E;")
+        yt_box.addWidget(lbl_yt_title)
         yt_box.addWidget(QLabel("YouTube Privacy:"))
         self.cmb_yt_privacy = QComboBox()
         self.cmb_yt_privacy.addItems(["public", "unlisted", "private"])
@@ -1334,10 +1341,17 @@ class SocialPostWindow(QMainWindow):
 
         self.chk_yt_kids = QCheckBox("Made for Kids")
         yt_box.addWidget(self.chk_yt_kids)
-        opt_grid.addLayout(yt_box)
+        row_yt_tt.addWidget(self.yt_options_container, 1)
 
         # TikTok Options
-        tt_box = QVBoxLayout()
+        self.tt_options_container = QWidget()
+        tt_box = QVBoxLayout(self.tt_options_container)
+        tt_box.setContentsMargins(0, 0, 0, 0)
+        tt_box.setSpacing(4)
+        lbl_tt_title = QLabel("🎵 TikTok Options:")
+        lbl_tt_title.setStyleSheet(
+            "font-size: 11px; font-weight: bold; color: #8B949E;")
+        tt_box.addWidget(lbl_tt_title)
         tt_box.addWidget(QLabel("TikTok Privacy:"))
         self.cmb_tt_privacy = QComboBox()
         self.cmb_tt_privacy.addItems(
@@ -1347,19 +1361,28 @@ class SocialPostWindow(QMainWindow):
         self.chk_tt_comments = QCheckBox("Allow Comments")
         self.chk_tt_comments.setChecked(True)
         tt_box.addWidget(self.chk_tt_comments)
-        opt_grid.addLayout(tt_box)
+        row_yt_tt.addWidget(self.tt_options_container, 1)
 
-        # Facebook Options
-        fb_box = QVBoxLayout()
-        fb_box.setSpacing(4)
+        gb_plat_layout.addLayout(row_yt_tt)
+
+        # Connect toggles to enable/disable option cards
+        self.chk_yt.toggled.connect(self.yt_options_container.setEnabled)
+        self.chk_tt.toggled.connect(self.tt_options_container.setEnabled)
+
+        # ── 3.2 Facebook Options (Full Width for Maximum Clarity & Comfort) ──
+        self.fb_options_container = QWidget()
+        fb_box = QVBoxLayout(self.fb_options_container)
+        fb_box.setContentsMargins(0, 4, 0, 0)
+        fb_box.setSpacing(6)
+        self.chk_fb.toggled.connect(self.fb_options_container.setEnabled)
 
         mode_header = QHBoxLayout()
-        self.lbl_fb_mode_active = QLabel("Mode: 🚀 Graph API")
+        self.lbl_fb_mode_active = QLabel("Mode: 🚀 Graph API (Native Meta Scheduling Active)")
         self.lbl_fb_mode_active.setStyleSheet(
             "font-size: 11px; font-weight: bold; color: #58A6FF;")
         btn_fb_mode_switch = QPushButton("⚙️ Setup")
-        btn_fb_mode_switch.setFixedHeight(22)
-        btn_fb_mode_switch.setStyleSheet("font-size: 10px; padding: 2px 6px;")
+        btn_fb_mode_switch.setFixedHeight(24)
+        btn_fb_mode_switch.setStyleSheet("font-size: 11px; padding: 2px 8px;")
         btn_fb_mode_switch.setToolTip(
             "Switch posting mode or configure credentials in Accounts tab")
         btn_fb_mode_switch.clicked.connect(
@@ -1368,7 +1391,7 @@ class SocialPostWindow(QMainWindow):
         mode_header.addWidget(btn_fb_mode_switch)
         fb_box.addLayout(mode_header)
 
-        fb_box.addWidget(QLabel("Facebook Status:"))
+        fb_box.addWidget(QLabel("Facebook Publishing Status:"))
         self.cmb_fb_publish = QComboBox()
         self.cmb_fb_publish.addItems([
             "🚀 Publish Immediately",
@@ -1381,18 +1404,16 @@ class SocialPostWindow(QMainWindow):
 
         # ── Schedule Panel (Collapsible, shown when Schedule Public selected) ──
         self.fb_schedule_container = QWidget()
+        self.fb_schedule_container.setObjectName("fb_schedule_container")
         sched_layout = QVBoxLayout(self.fb_schedule_container)
-        sched_layout.setContentsMargins(6, 6, 6, 6)
-        sched_layout.setSpacing(6)
-        self.fb_schedule_container.setStyleSheet(
-            "background: #111722; border: 1px solid #283548; border-radius: 8px; margin-top: 2px;"
-        )
+        sched_layout.setContentsMargins(10, 10, 10, 10)
+        sched_layout.setSpacing(8)
 
         sched_lbl_row = QHBoxLayout()
         sched_lbl_row.addWidget(QLabel("📅 Scheduled Date & Time:"))
         self.lbl_sched_min_note = QLabel("(Min 10m in future)")
         self.lbl_sched_min_note.setStyleSheet(
-            "font-size: 10px; color: #8B949E;")
+            "font-size: 11px; color: #8B949E;")
         sched_lbl_row.addWidget(self.lbl_sched_min_note,
                                 0, Qt.AlignmentFlag.AlignRight)
         sched_layout.addLayout(sched_lbl_row)
@@ -1403,24 +1424,67 @@ class SocialPostWindow(QMainWindow):
         self.dt_fb_schedule.setDisplayFormat("yyyy-MM-dd HH:mm")
         self.dt_fb_schedule.setMinimumDateTime(
             QDateTime.currentDateTime().addSecs(660))
+        self.dt_fb_schedule.setFixedHeight(30)
+        self.dt_fb_schedule.dateTimeChanged.connect(
+            self._on_schedule_datetime_changed)
         sched_layout.addWidget(self.dt_fb_schedule)
 
-        preset_row = QHBoxLayout()
-        preset_row.setSpacing(4)
-        for label, secs in [("+30m", 1800), ("+1h", 3600), ("+3h", 10800), ("+1d", 86400)]:
+        lbl_presets = QLabel("⚡ Quick Schedule Presets:")
+        lbl_presets.setStyleSheet(
+            "font-size: 11px; font-weight: bold; color: #8B949E; margin-top: 2px;")
+        sched_layout.addWidget(lbl_presets)
+
+        # Preset Row 1: Relative offsets with comfortable sizing and pointer cursors
+        preset_row1 = QHBoxLayout()
+        preset_row1.setSpacing(6)
+        presets_r1 = [
+            ("+30m", 1800, "Schedule 30 minutes from current time"),
+            ("+1h", 3600, "Schedule 1 hour from current time"),
+            ("+2h", 7200, "Schedule 2 hours from current time"),
+            ("+3h", 10800, "Schedule 3 hours from current time"),
+            ("+6h", 21600, "Schedule 6 hours from current time"),
+            ("+1d", 86400, "Schedule 24 hours from current time"),
+        ]
+        for label, secs, tip in presets_r1:
             btn_p = QPushButton(label)
-            btn_p.setFixedHeight(22)
-            btn_p.setStyleSheet("font-size: 10px; padding: 2px 6px;")
+            btn_p.setObjectName("schedulePresetBtn")
+            btn_p.setProperty("class", "schedulePresetBtn")
+            btn_p.setMinimumHeight(28)
+            btn_p.setCursor(Qt.PointingHandCursor)
+            btn_p.setToolTip(tip)
             btn_p.clicked.connect(
                 lambda checked, s=secs: self._apply_schedule_offset(s))
-            preset_row.addWidget(btn_p)
+            preset_row1.addWidget(btn_p)
+        sched_layout.addLayout(preset_row1)
 
-        btn_tmrw = QPushButton("Tomorrow 9AM")
-        btn_tmrw.setFixedHeight(22)
-        btn_tmrw.setStyleSheet("font-size: 10px; padding: 2px 6px;")
-        btn_tmrw.clicked.connect(self._apply_schedule_tomorrow_9am)
-        preset_row.addWidget(btn_tmrw)
-        sched_layout.addLayout(preset_row)
+        # Preset Row 2: Optimal Peak Target Times & Quick Reset
+        preset_row2 = QHBoxLayout()
+        preset_row2.setSpacing(6)
+        presets_r2 = [
+            ("🌅 Tomorrow 9AM", lambda: self._apply_schedule_tomorrow_9am(), "Schedule for 9:00 AM tomorrow"),
+            ("🌆 Tomorrow 6PM", lambda: self._apply_schedule_tomorrow_6pm(), "Schedule for 6:00 PM tomorrow"),
+            ("🌙 Tomorrow 8PM", lambda: self._apply_schedule_tomorrow_8pm(), "Schedule for 8:00 PM tomorrow"),
+            ("🔄 Reset (+1h)", lambda: self._apply_schedule_reset_1h(), "Reset schedule time to +1 hour"),
+        ]
+        for label, handler, tip in presets_r2:
+            btn_p2 = QPushButton(label)
+            btn_p2.setObjectName("schedulePresetBtn")
+            btn_p2.setProperty("class", "schedulePresetBtn")
+            btn_p2.setMinimumHeight(28)
+            btn_p2.setCursor(Qt.PointingHandCursor)
+            btn_p2.setToolTip(tip)
+            btn_p2.clicked.connect(lambda checked, h=handler: h())
+            preset_row2.addWidget(btn_p2)
+        sched_layout.addLayout(preset_row2)
+
+        # Real-time Relative Schedule Preview Badge
+        self.lbl_schedule_preview = QLabel("")
+        self.lbl_schedule_preview.setWordWrap(True)
+        self.lbl_schedule_preview.setStyleSheet(
+            "font-size: 11px; font-weight: 500; color: #58A6FF; padding: 5px 8px; background: rgba(88, 166, 255, 0.08); border-radius: 6px; border: 1px solid rgba(88, 166, 255, 0.2);"
+        )
+        sched_layout.addWidget(self.lbl_schedule_preview)
+        self._update_schedule_preview_label()
 
         batch_interval_row = QHBoxLayout()
         lbl_interval = QLabel("⏱️ Batch Video Interval:")
@@ -1528,12 +1592,16 @@ class SocialPostWindow(QMainWindow):
         grp_row.addWidget(self.btn_refresh_fb_groups)
         fb_box.addLayout(grp_row)
 
-        opt_grid.addLayout(fb_box)
-
-        gb_plat_layout.addLayout(opt_grid)
+        gb_plat_layout.addWidget(self.fb_options_container)
         left_layout.addWidget(gb_plat)
 
-        split.addWidget(left_container)
+        # Wrap left_container in a smooth, frame-less QScrollArea
+        left_scroll = QScrollArea()
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QFrame.NoFrame)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        left_scroll.setWidget(left_container)
+        split.addWidget(left_scroll)
 
         # Right Panel (Upload Progress & Console Logs)
         right_container = QWidget()
@@ -2215,6 +2283,42 @@ class SocialPostWindow(QMainWindow):
             else:
                 self.btn_publish.setText("🚀 Publish Immediately")
 
+    def _update_schedule_preview_label(self):
+        """Update live human-readable schedule preview badge and alert if under 10m."""
+        if not hasattr(self, "dt_fb_schedule") or not hasattr(self, "lbl_schedule_preview"):
+            return
+        selected_dt = self.dt_fb_schedule.dateTime()
+        now_dt = QDateTime.currentDateTime()
+        secs_diff = now_dt.secsTo(selected_dt)
+
+        if secs_diff < 600:
+            self.lbl_schedule_preview.setText(
+                "⚠️ Selected time is under 10 minutes in the future (Graph API minimum is 10m)!")
+            self.lbl_schedule_preview.setStyleSheet(
+                "font-size: 11px; font-weight: bold; color: #F85149; padding: 5px 8px; background: rgba(248, 81, 73, 0.12); border-radius: 6px; border: 1px solid rgba(248, 81, 73, 0.3);")
+            return
+
+        mins_total = secs_diff // 60
+        days = mins_total // 1440
+        hours = (mins_total % 1440) // 60
+        mins = mins_total % 60
+        rel_parts = []
+        if days > 0:
+            rel_parts.append(f"{days}d")
+        if hours > 0:
+            rel_parts.append(f"{hours}h")
+        rel_parts.append(f"{mins}m")
+        rel_str = " ".join(rel_parts)
+
+        dt_str = selected_dt.toString("ddd, MMM d, yyyy 'at' hh:mm AP")
+        self.lbl_schedule_preview.setText(
+            f"🕒 Will publish: {dt_str} (in {rel_str})")
+        self.lbl_schedule_preview.setStyleSheet(
+            "font-size: 11px; font-weight: 500; color: #58A6FF; padding: 5px 8px; background: rgba(88, 166, 255, 0.08); border-radius: 6px; border: 1px solid rgba(88, 166, 255, 0.2);")
+
+    def _on_schedule_datetime_changed(self, dt: QDateTime):
+        self._update_schedule_preview_label()
+
     def _on_fb_publish_status_changed(self, index: int):
         is_schedule = (index == 1)
         self.fb_schedule_container.setVisible(is_schedule)
@@ -2224,22 +2328,39 @@ class SocialPostWindow(QMainWindow):
             if self.dt_fb_schedule.dateTime() < min_dt:
                 self.dt_fb_schedule.setDateTime(
                     QDateTime.currentDateTime().addSecs(3600))
+            self._update_schedule_preview_label()
         self._update_publish_button_text()
 
     def _apply_schedule_offset(self, seconds: int):
-        new_dt = QDateTime.currentDateTime().addSecs(seconds)
         min_dt = QDateTime.currentDateTime().addSecs(660)
+        self.dt_fb_schedule.setMinimumDateTime(min_dt)
+        new_dt = QDateTime.currentDateTime().addSecs(seconds)
         if new_dt < min_dt:
             new_dt = min_dt
         self.dt_fb_schedule.setDateTime(new_dt)
+        self._update_schedule_preview_label()
+
+    def _apply_schedule_target_time(self, days_ahead: int, hour: int, minute: int = 0):
+        target_date = QDate.currentDate().addDays(days_ahead)
+        target_dt = QDateTime(target_date, QTime(hour, minute))
+        min_dt = QDateTime.currentDateTime().addSecs(660)
+        self.dt_fb_schedule.setMinimumDateTime(min_dt)
+        if target_dt < min_dt:
+            target_dt = QDateTime(target_date.addDays(1), QTime(hour, minute))
+        self.dt_fb_schedule.setDateTime(target_dt)
+        self._update_schedule_preview_label()
 
     def _apply_schedule_tomorrow_9am(self):
-        tomorrow = QDate.currentDate().addDays(1)
-        target_dt = QDateTime(tomorrow, QTime(9, 0))
-        min_dt = QDateTime.currentDateTime().addSecs(660)
-        if target_dt < min_dt:
-            target_dt = QDateTime.currentDateTime().addSecs(86400)
-        self.dt_fb_schedule.setDateTime(target_dt)
+        self._apply_schedule_target_time(1, 9, 0)
+
+    def _apply_schedule_tomorrow_6pm(self):
+        self._apply_schedule_target_time(1, 18, 0)
+
+    def _apply_schedule_tomorrow_8pm(self):
+        self._apply_schedule_target_time(1, 20, 0)
+
+    def _apply_schedule_reset_1h(self):
+        self._apply_schedule_offset(3600)
 
     def _apply_dialog_theme_to_widget(self, widget: QWidget):
         """Apply main stylesheet to a sub-dialog."""
@@ -2561,6 +2682,7 @@ class SocialPostWindow(QMainWindow):
         else:
             self.dt_fb_schedule.setDateTime(
                 QDateTime.currentDateTime().addSecs(3600))
+        self._update_schedule_preview_label()
 
         interval_val = fb.get("schedule_interval_minutes", 60)
         try:
@@ -3389,8 +3511,10 @@ class SocialPostWindow(QMainWindow):
                 lbl.setText(f"✅ {platform.capitalize()}: {message}")
                 if video_url:
                     self._published_links[platform] = video_url
-                    btn_link = QPushButton(
-                        f"🔗 Open {platform.capitalize()} Video")
+                    link_lbl = f"🔗 Open {platform.capitalize()} Video"
+                    if "scheduled" in str(message).lower():
+                        link_lbl = f"📅 View Scheduled {platform.capitalize()} Video"
+                    btn_link = QPushButton(link_lbl)
                     btn_link.setObjectName("primaryBtn")
                     btn_link.setStyleSheet(
                         "font-size: 11px; padding: 4px 8px; border-radius: 4px;")
@@ -3544,19 +3668,45 @@ class SocialPostWindow(QMainWindow):
                 padding: 0 6px;
                 color: {accent_col};
             }}
-            QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {{
+            QLineEdit, QTextEdit, QPlainTextEdit, QComboBox, QDateTimeEdit, QDateEdit, QTimeEdit, QSpinBox, QDoubleSpinBox {{
                 background-color: {input_bg};
                 color: {text_secondary};
                 border: 1px solid {border_col};
                 border-radius: 6px;
-                padding: 6px 8px;
+                padding: 4px 8px;
             }}
-            QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus {{
+            QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus, QDateTimeEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
                 border: 1px solid {accent_col};
+            }}
+            QDateTimeEdit QLineEdit, QSpinBox QLineEdit {{
+                background: transparent;
+                color: {text_secondary};
+                border: none;
             }}
             QComboBox::drop-down {{
                 border: none;
                 width: 20px;
+            }}
+            QDateTimeEdit::drop-down {{
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 26px;
+                border-left: 1px solid {border_col};
+                border-top-right-radius: 6px;
+                border-bottom-right-radius: 6px;
+                background-color: {surface_bg};
+            }}
+            QDateTimeEdit::drop-down:hover {{
+                background-color: {accent_col};
+            }}
+            QSpinBox::up-button, QSpinBox::down-button, QDateTimeEdit::up-button, QDateTimeEdit::down-button {{
+                subcontrol-origin: border;
+                width: 18px;
+                background-color: {surface_bg};
+                border-left: 1px solid {border_col};
+            }}
+            QSpinBox::up-button:hover, QSpinBox::down-button:hover, QDateTimeEdit::up-button:hover, QDateTimeEdit::down-button:hover {{
+                background-color: {accent_hover};
             }}
             QPushButton#primaryBtn {{
                 background-color: {accent_col};
@@ -3589,6 +3739,30 @@ class SocialPostWindow(QMainWindow):
             }}
             QPushButton#dangerBtn:hover {{
                 background-color: #F85149;
+                color: #FFFFFF;
+            }}
+            QWidget#fb_schedule_container {{
+                background-color: {surface_bg};
+                border: 1px solid {border_col};
+                border-radius: 8px;
+                margin-top: 4px;
+            }}
+            QPushButton.schedulePresetBtn, QPushButton#schedulePresetBtn {{
+                background-color: {input_bg};
+                color: {text_primary};
+                border: 1px solid {border_col};
+                border-radius: 6px;
+                padding: 4px 8px;
+                font-size: 11px;
+                font-weight: 500;
+            }}
+            QPushButton.schedulePresetBtn:hover, QPushButton#schedulePresetBtn:hover {{
+                background-color: {accent_col};
+                color: #FFFFFF;
+                border-color: {accent_col};
+            }}
+            QPushButton.schedulePresetBtn:pressed, QPushButton#schedulePresetBtn:pressed {{
+                background-color: {accent_hover};
                 color: #FFFFFF;
             }}
             QProgressBar {{
@@ -3656,3 +3830,47 @@ class SocialPostWindow(QMainWindow):
         """
         self.setStyleSheet(stylesheet)
         self._update_badges()
+
+        # Apply comprehensive dark/light theme to popup calendar widget
+        if hasattr(self, "dt_fb_schedule") and self.dt_fb_schedule:
+            cal = self.dt_fb_schedule.calendarWidget()
+            if cal:
+                cal.setStyleSheet(f"""
+                    QCalendarWidget {{
+                        background-color: {canvas_bg};
+                        color: {text_primary};
+                        border: 1px solid {border_col};
+                        border-radius: 8px;
+                    }}
+                    QCalendarWidget QWidget#qt_calendar_navigationbar {{
+                        background-color: {surface_bg};
+                        border-bottom: 1px solid {border_col};
+                    }}
+                    QCalendarWidget QTableView#qt_calendar_calendarview {{
+                        background-color: {canvas_bg};
+                        color: {text_primary};
+                        selection-background-color: {accent_col};
+                        selection-color: #FFFFFF;
+                        alternate-background-color: {surface_bg};
+                    }}
+                    QCalendarWidget QToolButton {{
+                        color: {text_primary};
+                        background-color: transparent;
+                        border-radius: 4px;
+                        padding: 4px;
+                        font-weight: bold;
+                    }}
+                    QCalendarWidget QToolButton:hover {{
+                        background-color: {surface_bg};
+                    }}
+                    QCalendarWidget QMenu {{
+                        background-color: {surface_bg};
+                        color: {text_primary};
+                        border: 1px solid {border_col};
+                    }}
+                    QCalendarWidget QSpinBox {{
+                        background-color: {input_bg};
+                        color: {text_primary};
+                        border: 1px solid {border_col};
+                    }}
+                """)

@@ -286,7 +286,7 @@ def get_modern_stylesheet(mode: str = "dark") -> str:
     /* ==========================================================================
        Text Inputs, TextEdits, and SpinBoxes
        ========================================================================== */
-    QLineEdit, QTextEdit, QPlainTextEdit, QSpinBox, QDoubleSpinBox {{
+    QLineEdit, QTextEdit, QPlainTextEdit, QSpinBox, QDoubleSpinBox, QDateTimeEdit, QDateEdit, QTimeEdit {{
         background-color: {input_bg};
         color: {text_primary};
         border: 1px solid {border_elevated};
@@ -296,13 +296,18 @@ def get_modern_stylesheet(mode: str = "dark") -> str:
         selection-background-color: {accent};
         selection-color: #ffffff;
     }}
-    QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
+    QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QDateTimeEdit:focus {{
         border: 1.5px solid {accent};
     }}
-    QLineEdit:disabled, QTextEdit:disabled, QSpinBox:disabled {{
+    QLineEdit:disabled, QTextEdit:disabled, QSpinBox:disabled, QDateTimeEdit:disabled {{
         background-color: {'#141a24' if is_dark else '#F1F5F9'};
         color: {text_muted};
         border-color: {border};
+    }}
+    QDateTimeEdit QLineEdit, QSpinBox QLineEdit {{
+        background: transparent;
+        color: {text_primary};
+        border: none;
     }}
 
     /* ==========================================================================
@@ -716,7 +721,7 @@ def get_settings_dialog_stylesheet(mode: str = "dark") -> str:
         border-radius: 6px;
         font-weight: 700;
     }}
-    QComboBox, QLineEdit, QSpinBox, QDoubleSpinBox {{
+    QComboBox, QLineEdit, QSpinBox, QDoubleSpinBox, QDateTimeEdit, QDateEdit, QTimeEdit {{
         background-color: {input_bg};
         color: {text_primary};
         border: 1px solid {border_elevated};
@@ -725,10 +730,10 @@ def get_settings_dialog_stylesheet(mode: str = "dark") -> str:
         min-height: 26px;
         font-size: 12px;
     }}
-    QComboBox:hover, QLineEdit:hover, QSpinBox:hover {{
+    QComboBox:hover, QLineEdit:hover, QSpinBox:hover, QDateTimeEdit:hover {{
         border-color: {accent};
     }}
-    QComboBox:focus, QLineEdit:focus, QSpinBox:focus {{
+    QComboBox:focus, QLineEdit:focus, QSpinBox:focus, QDateTimeEdit:focus {{
         border: 1.5px solid {accent};
         background-color: {input_focus_bg};
     }}
@@ -1045,7 +1050,7 @@ def get_batch_mapping_stylesheet(mode: str = "dark") -> str:
     /* ==========================================================================
        Input Fields (QComboBox, QLineEdit, QSpinBox) - Recessed 30% Surface
        ========================================================================== */
-    QComboBox, QLineEdit, QSpinBox, QDoubleSpinBox {{
+    QComboBox, QLineEdit, QSpinBox, QDoubleSpinBox, QDateTimeEdit, QDateEdit, QTimeEdit {{
         background-color: {input_bg};
         color: {text_primary};
         border: 1px solid {border_elevated};
@@ -1057,10 +1062,10 @@ def get_batch_mapping_stylesheet(mode: str = "dark") -> str:
         selection-background-color: {accent};
         selection-color: #FFFFFF;
     }}
-    QComboBox:hover, QLineEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover {{
+    QComboBox:hover, QLineEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover, QDateTimeEdit:hover {{
         border-color: {accent};
     }}
-    QComboBox:focus, QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
+    QComboBox:focus, QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QDateTimeEdit:focus {{
         border: 1.5px solid {accent};
         background-color: {input_focus_bg};
     }}

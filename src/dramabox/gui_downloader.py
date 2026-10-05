@@ -34,9 +34,10 @@ from PyQt5.QtCore import (
     QThread,
     QThreadPool,
     QTimer,
+    QUrl,
     pyqtSignal,
 )
-from PyQt5.QtGui import QColor, QFont, QIcon, QPainter, QPainterPath, QPixmap
+from PyQt5.QtGui import QColor, QDesktopServices, QFont, QIcon, QPainter, QPainterPath, QPixmap
 from PyQt5.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -46,6 +47,7 @@ from PyQt5.QtWidgets import (
     QFrame,
     QGridLayout,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLayout,
     QLineEdit,
@@ -112,6 +114,14 @@ except ImportError:
         from sekai_api import SekaiDramaAPI
     except ImportError:
         SekaiDramaAPI = None
+
+try:
+    from . import yoinks_engine
+except ImportError:
+    try:
+        import yoinks_engine
+    except ImportError:
+        yoinks_engine = None
 
 APP_VERSION = "v1.3.0"
 ORGANIZATION_NAME = "AI_Dubber"
@@ -223,7 +233,17 @@ FEATURED_PLATFORM_DRAMAS = {
 def detect_platform_from_url(url_text: str) -> Optional[str]:
     if not url_text:
         return None
-    t = str(url_text).strip().lower()
+    clean = str(url_text).strip()
+    if yoinks_engine and yoinks_engine.is_probably_url(clean):
+        p = yoinks_engine.detect_platform(clean)
+        if p.key == "youtube":
+            return "YouTube"
+        if p.key == "tiktok":
+            return "TikTok"
+        if p.key == "facebook":
+            return "Facebook"
+
+    t = clean.lower()
     if "hongguo" in t or "hongguoduanju" in t:
         return "Hongguo"
     if "dramabox" in t:
@@ -950,6 +970,7 @@ class UnifiedDownloadWorker(QThread):
         downloader: Optional[DramaboxDownloader],
         sekai_api: Optional[SekaiDramaAPI],
         max_workers: int = 4,
+        download_choice: Optional[Any] = None,
     ):
         super().__init__()
         self.series_detail = series_detail
@@ -959,6 +980,7 @@ class UnifiedDownloadWorker(QThread):
         self.hongguo_client = hongguo_client
         self.downloader = downloader
         self.sekai_api = sekai_api
+        self.download_choice = download_choice
         if max_workers is None:
             max_workers = 4
         self.max_workers = max(1, min(int(max_workers), 16))
@@ -987,6 +1009,79 @@ class UnifiedDownloadWorker(QThread):
 
         if self.cancelled:
             return False, "Cancelled"
+
+        chapters = self.series_detail.get("chapters", [])
+        chapter = chapters[ep_num - 1] if (0 <= ep_num - 1 < len(chapters)) else {}
+
+        # Social platforms: YouTube, Facebook, TikTok with yoinks_engine
+        if platform in ("TikTok", "YouTube", "Facebook") and yoinks_engine and yoinks_engine.BinaryResolver.resolve_ytdlp():
+            ep_url = str(
+                chapter.get("resolvedUrl")
+                or chapter.get("episodeUrl")
+                or chapter.get("url")
+                or self.series_detail.get("series_id", "")
+            ).strip()
+            if ep_url and not ep_url.startswith("http") and not ep_url.startswith("ytdlp://"):
+                ep_url = f"https://{ep_url}"
+
+            raw_title = chapter.get("title") or self.series_detail.get("series_name") or f"{platform}_Video_{ep_num}"
+            clean_name = sanitize_filename(raw_title, f"{platform}_Video_{ep_num}")
+            is_audio = bool(self.download_choice and getattr(self.download_choice, "is_audio", False))
+            ext = ".mp3" if is_audio else ".mp4"
+
+            if len(self.selected_eps) > 1:
+                dest_file = os.path.join(series_dir, f"{ep_num:02d} - {clean_name}{ext}")
+            else:
+                dest_file = os.path.join(series_dir, f"{clean_name}{ext}")
+
+            if os.path.exists(dest_file) and os.path.getsize(dest_file) > 1024:
+                self.log_sig.emit(f"⏩ មានឯកសាររួចហើយ: {os.path.basename(dest_file)}")
+                self.progress_sig.emit(task_id, 100, 0.0, os.path.getsize(dest_file), os.path.getsize(dest_file))
+                self.episode_done_sig.emit(task_id, dest_file)
+                return True, dest_file
+
+            def _yoinks_prog(p: yoinks_engine.DownloadProgress):
+                self.progress_sig.emit(task_id, int(p.percent), p.speed, p.downloaded_bytes, p.total_bytes)
+
+            choice = self.download_choice
+            if not choice:
+                choices = self.series_detail.get("choices")
+                if choices:
+                    choice = choices[0]
+                else:
+                    choice = yoinks_engine.DownloadChoice(
+                        kind="audio" if is_audio else "video",
+                        label="best quality",
+                        args=["-f", "ba/b", "-x", "--audio-format", "mp3", "--audio-quality", "0"] if is_audio else ["-f", "bv*+ba/b", "--merge-output-format", "mp4"],
+                        is_audio=is_audio,
+                    )
+
+            info_json = self.series_detail.get("info_json_path") if len(self.selected_eps) == 1 else None
+
+            try:
+                saved = yoinks_engine.execute_download(
+                    url=ep_url,
+                    choice=choice,
+                    output_dir=series_dir,
+                    info_json_path=info_json,
+                    item_index=ep_num if len(self.selected_eps) > 1 else None,
+                    total_items=len(self.selected_eps) if len(self.selected_eps) > 1 else None,
+                    item_title=raw_title,
+                    progress_callback=_yoinks_prog,
+                    cancel_check=lambda: self.cancelled,
+                )
+                if saved and os.path.exists(saved) and os.path.getsize(saved) > 1024:
+                    self.episode_done_sig.emit(task_id, saved)
+                    self.log_sig.emit(f"✅ បានទាញយកជោគជ័យ: {os.path.basename(saved)}")
+                    return True, saved
+                else:
+                    err = "File not found after download"
+                    self.episode_failed_sig.emit(task_id, err)
+                    return False, err
+            except Exception as exc:
+                self.log_sig.emit(f"❌ Error downloading EP{ep_num}: {exc}")
+                self.episode_failed_sig.emit(task_id, str(exc))
+                return False, str(exc)
 
         try:
             stream_url, ep_label = resolve_episode_stream(
@@ -1122,24 +1217,21 @@ class UnifiedDownloadWorker(QThread):
 # ── Social Platform Metadata Worker ─────────────────────────────────────────
 
 class SocialMetadataWorker(QThread):
-    """Background thread that fetches real metadata for social platform URLs via yt-dlp.
+    """Background thread that fetches real metadata for social platform URLs via yoinks_engine / yt-dlp.
 
-    Uses PortableVideoSupport.get_*_info() methods which call yt-dlp
-    extract_info(download=False) to retrieve real title, thumbnail, and
-    playlist entries without downloading any media.
-
-    Falls back to fetch_social_series_info() stub when yt-dlp is unavailable
-    or the fetch fails.
+    Retrieves real title, duration, thumbnail, playlist entries, and dynamic quality choices
+    without downloading any media.
     """
     detail_ready = pyqtSignal(object)
     error = pyqtSignal(str)
     status_sig = pyqtSignal(str)
 
-    def __init__(self, platform: str, url: str, downloader, parent=None):
+    def __init__(self, platform: str, url: str, downloader, mode: Optional[str] = None, parent=None):
         super().__init__(parent)
         self.platform = platform
         self.url = url.strip()
         self.downloader = downloader
+        self.mode = mode
 
     def run(self):
         try:
@@ -1157,7 +1249,73 @@ class SocialMetadataWorker(QThread):
                 self.error.emit(str(inner_exc))
 
     def _fetch_social_detail(self) -> dict:
-        """Try yt-dlp metadata fetch; fall back to stub on failure."""
+        """Fetch real metadata via yoinks_engine, with fallback to PortableVideoSupport."""
+        if yoinks_engine and yoinks_engine.BinaryResolver.resolve_ytdlp():
+            try:
+                is_pl = (self.mode == "playlist")
+                if self.mode is None and self.platform == "YouTube":
+                    yt = yoinks_engine.parse_youtube_url(self.url)
+                    is_pl = yt.has_playlist and not yt.has_video
+
+                if is_pl:
+                    self.status_sig.emit("🔍 កំពុងផ្ទុក Playlist...")
+                    res = yoinks_engine.probe_playlist(self.url)
+                else:
+                    self.status_sig.emit("🔍 កំពុងផ្ទុក Video...")
+                    res = yoinks_engine.probe_video(self.url)
+
+                chapters = []
+                if res.info.is_playlist and res.info.entries:
+                    for e in res.info.entries:
+                        chapters.append({
+                            "id": str(e.id),
+                            "index": e.index - 1,
+                            "chapterId": str(e.id),
+                            "chapterName": e.title,
+                            "title": e.title,
+                            "duration": e.duration,
+                            "url": e.url or self.url,
+                            "episodeUrl": e.url or self.url,
+                            "resolvedUrl": e.url or self.url,
+                            "unlock": 1,
+                            "platform": self.platform,
+                        })
+                else:
+                    chapters.append({
+                        "id": "1",
+                        "index": 0,
+                        "chapterId": "1",
+                        "chapterName": res.info.title,
+                        "title": res.info.title,
+                        "duration": res.info.duration,
+                        "url": self.url,
+                        "episodeUrl": self.url,
+                        "resolvedUrl": self.url,
+                        "unlock": 1,
+                        "platform": self.platform,
+                    })
+
+                ep_count = len(chapters)
+                dur_str = f" • {yoinks_engine.format_duration(res.info.duration)}" if res.info.duration else ""
+                author_str = f" by {res.info.uploader}" if res.info.uploader else ""
+
+                return {
+                    "platform": self.platform,
+                    "series_id": self.url,
+                    "series_name": res.info.title,
+                    "series_cover": res.info.thumbnail,
+                    "series_intro": f"{self.platform} • {ep_count} វីដេអូ{author_str}{dur_str}",
+                    "episode_cnt": ep_count,
+                    "vid_list": [],
+                    "chapters": chapters,
+                    "page_html": "",
+                    "choices": res.choices,
+                    "info_json_path": res.info_json_path,
+                    "is_playlist": res.info.is_playlist,
+                }
+            except Exception as exc:
+                _log.warning("yoinks_engine probe failed: %s", exc)
+
         if self.downloader and hasattr(self.downloader, "portable_video"):
             pv = self.downloader.portable_video
             if pv.available:
@@ -1174,8 +1332,7 @@ class SocialMetadataWorker(QThread):
                     if info and info.get("episodes"):
                         return self._info_to_series_detail(info)
                 except Exception as exc:
-                    _log.debug(
-                        "yt-dlp metadata fetch failed for %s: %s", self.platform, exc)
+                    _log.debug("yt-dlp metadata fetch failed for %s: %s", self.platform, exc)
 
         # Fallback: create stub detail so download still works
         return fetch_social_series_info(self.platform, self.url, self.downloader)
@@ -1201,6 +1358,9 @@ class SocialMetadataWorker(QThread):
             "vid_list": [],
             "chapters": chapters,
             "page_html": "",
+            "choices": info.get("choices", []),
+            "info_json_path": info.get("info_json_path"),
+            "is_playlist": info.get("is_playlist", ep_count > 1),
         }
 
 
@@ -1410,6 +1570,7 @@ class DownloadQueueItemWidget(QFrame):
         self.task_id = task_id
         self.title = title
         self.ep_label = ep_label
+        self.dest_path = ""
         self.setObjectName("queueItem")
 
         layout = QVBoxLayout(self)
@@ -1433,13 +1594,49 @@ class DownloadQueueItemWidget(QFrame):
         self.bar.setObjectName("queueBar")
         layout.addWidget(self.bar)
 
+        bottom_row = QHBoxLayout()
         self.lbl_metrics = QLabel("0% • 0 MB/s • 0 MB")
         self.lbl_metrics.setStyleSheet("color: #9c8a7b; font-size: 10px;")
-        layout.addWidget(self.lbl_metrics)
+        bottom_row.addWidget(self.lbl_metrics, 1)
+
+        self.btn_open = QPushButton("📁 បើក (Open)")
+        self.btn_open.setFixedHeight(22)
+        self.btn_open.setCursor(Qt.PointingHandCursor)
+        self.btn_open.setStyleSheet("""
+            QPushButton {
+                background: #1e293b;
+                border: 1px solid #334155;
+                border-radius: 4px;
+                color: #38bdf8;
+                font-size: 10px;
+                font-weight: bold;
+                padding: 2px 8px;
+            }
+            QPushButton:hover {
+                background: #334155;
+                color: #7dd3fc;
+            }
+        """)
+        self.btn_open.hide()
+        self.btn_open.clicked.connect(self._open_dest)
+        bottom_row.addWidget(self.btn_open, 0, Qt.AlignRight)
+
+        layout.addLayout(bottom_row)
+
+    def _open_dest(self):
+        if self.dest_path and os.path.exists(self.dest_path):
+            QDesktopServices.openUrl(QUrl.fromLocalFile(self.dest_path))
+        elif self.dest_path and os.path.exists(os.path.dirname(self.dest_path)):
+            QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.dirname(self.dest_path)))
 
     def update_progress(self, pct: int, speed: float = 0.0, done_bytes: int = 0, total_bytes: int = 0):
         self.bar.setValue(pct)
-        if total_bytes > 0:
+        if yoinks_engine and (done_bytes > 0 or total_bytes > 0):
+            done_s = yoinks_engine.format_bytes(done_bytes)
+            total_s = yoinks_engine.format_bytes(total_bytes) if total_bytes > 0 else "?"
+            spd_s = f" • {yoinks_engine.format_speed(speed)}" if speed > 0 else ""
+            self.lbl_metrics.setText(f"{pct}% • {done_s} / {total_s}{spd_s}")
+        elif total_bytes > 0:
             done_mb = done_bytes / (1024 * 1024)
             total_mb = total_bytes / (1024 * 1024)
             spd_str = f"{speed:.1f} MB/s • " if speed > 0 else ""
@@ -1451,17 +1648,72 @@ class DownloadQueueItemWidget(QFrame):
         self.lbl_status.setStyleSheet("color: #0fbccb; font-size: 11px;")
 
     def set_completed(self, path: str):
+        self.dest_path = path
         self.bar.setValue(100)
         self.lbl_status.setText("✅ ជោគជ័យ")
         self.lbl_status.setStyleSheet(
             "color: #27ae60; font-size: 11px; font-weight: bold;")
         self.lbl_metrics.setText(f"បានរក្សាទុក: {os.path.basename(path)}")
+        self.btn_open.show()
 
     def set_failed(self, reason: str):
         self.lbl_status.setText("❌ បរាជ័យ")
         self.lbl_status.setStyleSheet(
             "color: #e23f5c; font-size: 11px; font-weight: bold;")
         self.lbl_metrics.setText(reason)
+
+
+# ── YouTube Target Dialog (Yoinks Flow) ──────────────────────────────────────
+
+class YouTubeTargetDialog(QDialog):
+    """Modal dialog prompting user to choose between downloading the single video or the entire playlist."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("YouTube - ជ្រើសរើសគោលដៅ (Target Selection)")
+        self.setFixedSize(460, 210)
+        self.choice = "video"
+        self.setStyleSheet("""
+            QDialog { background-color: #141a24; color: #f1f5f9; border: 1px solid #232d3e; border-radius: 12px; }
+            QLabel { color: #f1f5f9; font-size: 13px; }
+            QPushButton {
+                background-color: #1c273c;
+                color: #f1f5f9;
+                border: 1px solid #2e3e56;
+                border-radius: 8px;
+                padding: 10px 14px;
+                font-weight: bold;
+                font-size: 13px;
+                text-align: left;
+            }
+            QPushButton:hover { background-color: #273752; border-color: #00b4d8; }
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+
+        lbl_msg = QLabel("Link នេះមានទាំង <b>វីដេអូទោល</b> និង <b>បញ្ជីចាក់ (Playlist)</b>។<br>តើអ្នកចង់ទាញយកមួយណា?")
+        lbl_msg.setWordWrap(True)
+        layout.addWidget(lbl_msg)
+
+        btn_video = QPushButton("🎥 ទាញយកតែវីដេអូនេះ (Single Video)")
+        btn_video.setCursor(Qt.PointingHandCursor)
+        btn_video.clicked.connect(self._choose_video)
+        layout.addWidget(btn_video)
+
+        btn_playlist = QPushButton("📑 ទាញយកបញ្ជីចាក់ទាំងមូល (Entire Playlist)")
+        btn_playlist.setCursor(Qt.PointingHandCursor)
+        btn_playlist.clicked.connect(self._choose_playlist)
+        layout.addWidget(btn_playlist)
+
+    def _choose_video(self):
+        self.choice = "video"
+        self.accept()
+
+    def _choose_playlist(self):
+        self.choice = "playlist"
+        self.accept()
 
 
 # ── Settings Dialog ──────────────────────────────────────────────────────────
@@ -1565,6 +1817,7 @@ class DramaBoxTool(QMainWindow):
         self.current_series_detail = None
         self.selected_episodes = set()
         self.current_download_worker = None
+        self.current_choices = []
 
         # Hongguo state
         self.active_category = "live"
@@ -1745,7 +1998,7 @@ class DramaBoxTool(QMainWindow):
         self.combo_range.setFixedHeight(34)
         self.combo_range.setObjectName("darkCombo")
         self.combo_range.addItems(
-            ["ទាញយក: ទាំងអស់", "ទាញយក: 1-10 ភាគ", "ទាញយក: 1-30 ភាគ", "ទាញយក: 5 ភាគដំបូង"])
+            ["ទាញយក: ទាំងអស់", "ទាញយក: 1-10 ភាគ", "ទាញយក: 1-30 ភាគ", "ទាញយក: 5 ភាគដំបូង", "🎯 ចន្លោះភាគ (Custom Range)..."])
         self.combo_range.currentIndexChanged.connect(self.handle_range_changed)
         options_row.addWidget(self.combo_range, 1)
 
@@ -2686,6 +2939,16 @@ class DramaBoxTool(QMainWindow):
             self._social_debounce_timer.stop()
             self._pending_social_url = clean_text
 
+            mode = None
+            if target_platform == "YouTube" and yoinks_engine and (clean_text.startswith("http://") or clean_text.startswith("https://")):
+                yt_info = yoinks_engine.parse_youtube_url(clean_text)
+                if yt_info.has_video and yt_info.has_playlist:
+                    dlg = YouTubeTargetDialog(self)
+                    if dlg.exec_() == QDialog.Accepted:
+                        mode = dlg.choice
+                    else:
+                        return
+
             # Cancel any running workers
             if self._social_worker and self._social_worker.isRunning():
                 self._social_worker.terminate()
@@ -2703,6 +2966,7 @@ class DramaBoxTool(QMainWindow):
                 platform=target_platform,
                 url=clean_text,
                 downloader=self.downloader,
+                mode=mode,
                 parent=self,
             )
             self._social_worker.detail_ready.connect(self._apply_series_detail)
@@ -2753,6 +3017,23 @@ class DramaBoxTool(QMainWindow):
 
         self.lbl_ep_count.setText(f"ចំនួនភាគ: {ep_cnt}")
 
+        # Populate dynamic quality choices
+        choices = detail.get("choices")
+        self.combo_quality.blockSignals(True)
+        self.combo_quality.clear()
+        if choices:
+            self.current_choices = choices
+            for choice in choices:
+                prefix = "♪ " if choice.kind == "audio" else "▶ "
+                self.combo_quality.addItem(f"{prefix}{choice.label}")
+        else:
+            self.current_choices = []
+            self.combo_quality.addItems(
+                ["កម្រិត: 1080p", "កម្រិត: 720p", "កម្រិត: 480p"]
+            )
+        self.combo_quality.setCurrentIndex(0)
+        self.combo_quality.blockSignals(False)
+
         # Platform-specific helper text
         if platform in ("TikTok", "YouTube", "Facebook"):
             if ep_cnt == 1:
@@ -2798,14 +3079,23 @@ class DramaBoxTool(QMainWindow):
                 wid.deleteLater()
 
         self.selected_episodes.clear()
+        chapters = self.current_series_detail.get("chapters", []) if self.current_series_detail else []
+
         for i in range(1, total_eps + 1):
             chip = EpisodeChip(i, self.episodes_container)
+            ch = chapters[i - 1] if (i - 1 < len(chapters)) else {}
+            ch_title = ch.get("title") or ch.get("chapterName") or f"Episode {i}"
+            dur = ch.get("duration")
+            dur_str = f" ({yoinks_engine.format_duration(dur)})" if (dur and yoinks_engine) else ""
+            chip.setToolTip(f"#{i:02d}: {ch_title}{dur_str}")
             chip.toggled.connect(
                 lambda checked, num=i: self._on_ep_chip_toggled(num, checked))
             self.episodes_layout.addWidget(chip)
             self.selected_episodes.add(i)
 
+        self.combo_range.blockSignals(True)
         self.combo_range.setCurrentIndex(0)
+        self.combo_range.blockSignals(False)
         self.chk_select_all.setChecked(True)
 
     def _on_ep_chip_toggled(self, ep_num: int, checked: bool):
@@ -2828,6 +3118,24 @@ class DramaBoxTool(QMainWindow):
         if not self.current_series_detail:
             return
         total = self.current_series_detail.get("episode_cnt", 0)
+
+        if idx == 4:  # Custom Range
+            text, ok = QInputDialog.getText(
+                self,
+                "Custom Episode Range",
+                f"បញ្ចូលចន្លោះភាគ (ឧទាហរណ៍ 1-5, 8, 10-12) សរុប {total} ភាគ:",
+                text=f"1-{min(10, total)}",
+            )
+            if ok and text.strip():
+                parsed = yoinks_engine.parse_item_range(text.strip(), total) if yoinks_engine else None
+                if parsed and parsed.valid:
+                    valid_set = set(parsed.indices)
+                    for i in range(self.episodes_layout.count()):
+                        item = self.episodes_layout.itemAt(i)
+                        if item and item.widget():
+                            ep_num = getattr(item.widget(), "ep_num", i + 1)
+                            item.widget().setChecked(ep_num in valid_set)
+                    return
 
         limit = total
         if idx == 1:
@@ -2878,9 +3186,12 @@ class DramaBoxTool(QMainWindow):
         platform = self.current_series_detail.get("platform", "Hongguo")
         series_name = self.current_series_detail.get("series_name", "Drama")
 
-        # Quality selection
+        # Quality / format selection
         q_idx = self.combo_quality.currentIndex()
         quality = "1080p" if q_idx == 0 else ("720p" if q_idx == 1 else "480p")
+        selected_choice = None
+        if hasattr(self, "current_choices") and self.current_choices and 0 <= q_idx < len(self.current_choices):
+            selected_choice = self.current_choices[q_idx]
 
         # Hide empty queue widget
         self.empty_queue_widget.hide()
@@ -2908,6 +3219,7 @@ class DramaBoxTool(QMainWindow):
             downloader=self.downloader,
             sekai_api=self.sekai_api,
             max_workers=self.max_workers,
+            download_choice=selected_choice,
         )
 
         def _on_prog(tid, pct, spd, done_b, tot_b):

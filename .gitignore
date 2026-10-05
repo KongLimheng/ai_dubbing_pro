@@ -1,6 +1,9 @@
 # Python-generated files
 __pycache__/
 *.py[oc]
+!src/core_app.pyc
+!src/ui_widgets.pyc
+!src/workers.pyc
 build/
 dist/
 wheels/
@@ -12,6 +15,7 @@ AI_Dubber_Ultimate_v1.2.9.exe
 *.dll
 *.log
 *.bat
+!run.bat
 *.exe
 
 # App Locks & Temporary Folders
