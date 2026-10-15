@@ -95,6 +95,32 @@ def create_enhanced_batch_mapping_dialog_class(base_dialog_class):
     Factory creating EnhancedBatchSrtMappingDialog subclassing the original compiled dialog.
     """
     class EnhancedBatchSrtMappingDialog(base_dialog_class):
+        @classmethod
+        def get_voice_label(cls, voice_id):
+            """Returns clean human-readable voice label for Edge-TTS and VoxCPM voices."""
+            if cls.is_srt_tag_voice_mode(voice_id):
+                return 'Use SRT Tags'
+            if voice_id is None:
+                return 'Auto Detect (Old)'
+            import voxcpm_support
+            if voxcpm_support.is_voxcpm_voice(voice_id):
+                preset = voxcpm_support.resolve_voxcpm_voice_preset(voice_id)
+                if preset and preset.get('display_name'):
+                    return preset['display_name']
+                if voxcpm_support.is_voxcpm_reference_voice(voice_id):
+                    ref_info = voxcpm_support.get_voxcpm_reference_settings(voice_id)
+                    p = ref_info.get('path', '')
+                    base_name = os.path.basename(p) if p else 'Custom'
+                    return f"AI VoxCPM2 - Clone ({base_name})"
+                return f"AI VoxCPM2 ({voice_id})"
+            for opt in getattr(cls, 'VOICE_OPTIONS', []):
+                if len(opt) >= 2 and opt[1] == voice_id:
+                    return opt[0]
+            try:
+                return super().get_voice_label(voice_id)
+            except Exception:
+                return str(voice_id)
+
         def _sort_file_paths_naturally(self, file_paths):
             return sort_file_paths_naturally(file_paths)
 
@@ -207,6 +233,15 @@ def create_enhanced_batch_mapping_dialog_class(base_dialog_class):
                 if hasattr(self, 'summary_label') and self.summary_label:
                     current_html = self.summary_label.text() or ""
                     parsed = re.findall(r'<b>(.*?)</b>\s*(\d+)', current_html)
+                    voxcpm_count = 0
+                    try:
+                        import voxcpm_support
+                        if hasattr(self, 'voice_assignments') and isinstance(self.voice_assignments, dict):
+                            voxcpm_count = sum(1 for v in self.voice_assignments.values() if voxcpm_support.is_voxcpm_voice(v))
+                    except Exception:
+                        pass
+                    if voxcpm_count > 0 and not any(p[0] == 'VoxCPM' for p in parsed):
+                        parsed.append(('VoxCPM', str(voxcpm_count)))
                     if parsed:
                         dark_styles = {
                             'Mapped': 'background:#143322; color:#4ADE80; border:1px solid #1E5C38;',
@@ -214,6 +249,7 @@ def create_enhanced_batch_mapping_dialog_class(base_dialog_class):
                             'SRT Tags': 'background:#332412; color:#FB923C; border:1px solid #5C3A1A;',
                             'Piseth': 'background:#1E223D; color:#818CF8; border:1px solid #313A6B;',
                             'Sreymom': 'background:#331526; color:#F472B6; border:1px solid #5C2243;',
+                            'VoxCPM': 'background:#2A1B3D; color:#C084FC; border:1px solid #6B21A8;',
                             'Pitch': 'background:#2B2113; color:#FBBF24; border:1px solid #4D3B1D;',
                             'Speed': 'background:#0F293D; color:#38BDF8; border:1px solid #1B4B6E;',
                             'Echo': 'background:#2A1636; color:#C084FC; border:1px solid #4B2461;',
@@ -226,6 +262,7 @@ def create_enhanced_batch_mapping_dialog_class(base_dialog_class):
                             'SRT Tags': 'background:#FFF8E8; color:#D97706; border:1px solid #FED7AA;',
                             'Piseth': 'background:#EEF2FF; color:#4F46E5; border:1px solid #C7D2FE;',
                             'Sreymom': 'background:#FFF1F7; color:#DB2777; border:1px solid #FBCFE8;',
+                            'VoxCPM': 'background:#FAF5FF; color:#9333EA; border:1px solid #E9D5FF;',
                             'Pitch': 'background:#FFFBEB; color:#B45309; border:1px solid #FDE68A;',
                             'Speed': 'background:#F0F9FF; color:#0284C7; border:1px solid #BAE6FD;',
                             'Echo': 'background:#FAF5FF; color:#9333EA; border:1px solid #E9D5FF;',
@@ -319,6 +356,22 @@ def create_enhanced_batch_mapping_dialog_class(base_dialog_class):
 
             # Apply 3-color design system theme (Dark or Light)
             self.apply_dialog_theme()
+
+            # Ensure bulk_voice_combo contains VoxCPM options and restore saved voice mode
+            try:
+                if hasattr(self, 'bulk_voice_combo') and self.bulk_voice_combo:
+                    import voxcpm_support
+                    for lbl, vid, _ in voxcpm_support.VOXCPM_BUILTIN_VOICES:
+                        if self.bulk_voice_combo.findData(vid) < 0:
+                            self.bulk_voice_combo.addItem(lbl, vid)
+                    from settings_manager import get_batch_auto_dub_config
+                    saved_voice = get_batch_auto_dub_config().get('voice_mode')
+                    if saved_voice:
+                        sv_idx = self.bulk_voice_combo.findData(saved_voice)
+                        if sv_idx >= 0:
+                            self.bulk_voice_combo.setCurrentIndex(sv_idx)
+            except Exception as e:
+                print(f"[BatchLoader] bulk_voice_combo VoxCPM init notice: {e}")
 
         def _inject_vocal_removal_controls(self):
             """
@@ -505,6 +558,82 @@ def create_enhanced_batch_mapping_dialog_class(base_dialog_class):
 
                 vocal_layout.addLayout(row3_layout)
 
+                # Row 4: TTS Speech Engine Quick Switch (Cloud Edge-TTS vs Local VoxCPM2)
+                row4_layout = QHBoxLayout()
+                row4_layout.setSpacing(14)
+
+                lbl_engine = QLabel("🎙️ Batch Voice Mode:")
+                lbl_engine.setStyleSheet("font-weight: 600;")
+                row4_layout.addWidget(lbl_engine)
+
+                self.cmb_batch_engine_mode = QComboBox()
+                self.cmb_batch_engine_mode.setObjectName("BatchCmbEngineMode")
+                self.cmb_batch_engine_mode.addItem("Cloud Edge-TTS / SRT Tags (Fast Standard)", "edgetts")
+                self.cmb_batch_engine_mode.addItem("🎙️ Local VoxCPM2 (Expressive AI Khmer Voice)", "voxcpm")
+                self.cmb_batch_engine_mode.setStyleSheet("min-width: 240px; font-weight: bold;")
+                row4_layout.addWidget(self.cmb_batch_engine_mode)
+
+                self.cmb_batch_vox_preset = QComboBox()
+                self.cmb_batch_vox_preset.setObjectName("BatchCmbVoxPreset")
+                import voxcpm_support
+                for lbl, vid, _ in voxcpm_support.VOXCPM_BUILTIN_VOICES:
+                    self.cmb_batch_vox_preset.addItem(lbl, vid)
+                self.cmb_batch_vox_preset.setStyleSheet("min-width: 260px; font-weight: bold;")
+                self.cmb_batch_vox_preset.setVisible(False)
+                row4_layout.addWidget(self.cmb_batch_vox_preset)
+
+                self.btn_apply_voxcpm_all = QPushButton("⚡ Apply VoxCPM Voice to All")
+                self.btn_apply_voxcpm_all.setObjectName("secondaryBtn")
+                self.btn_apply_voxcpm_all.setToolTip("Applies the selected VoxCPM AI voice preset to all video rows in the batch list")
+                self.btn_apply_voxcpm_all.setVisible(False)
+                row4_layout.addWidget(self.btn_apply_voxcpm_all)
+
+                def on_engine_mode_changed(idx):
+                    is_vox = (self.cmb_batch_engine_mode.currentData() == "voxcpm")
+                    self.cmb_batch_vox_preset.setVisible(is_vox)
+                    self.btn_apply_voxcpm_all.setVisible(is_vox)
+                    if is_vox and hasattr(self, 'bulk_voice_combo'):
+                        v_id = self.cmb_batch_vox_preset.currentData()
+                        b_idx = self.bulk_voice_combo.findData(v_id)
+                        if b_idx >= 0:
+                            self.bulk_voice_combo.setCurrentIndex(b_idx)
+
+                def on_vox_preset_changed(idx):
+                    if hasattr(self, 'bulk_voice_combo'):
+                        v_id = self.cmb_batch_vox_preset.currentData()
+                        b_idx = self.bulk_voice_combo.findData(v_id)
+                        if b_idx >= 0:
+                            self.bulk_voice_combo.setCurrentIndex(b_idx)
+
+                def on_apply_vox_all_clicked():
+                    v_id = self.cmb_batch_vox_preset.currentData()
+                    if hasattr(self, 'bulk_voice_combo'):
+                        b_idx = self.bulk_voice_combo.findData(v_id)
+                        if b_idx >= 0:
+                            self.bulk_voice_combo.setCurrentIndex(b_idx)
+                    self.apply_voice_to_all_rows()
+
+                self.cmb_batch_engine_mode.currentIndexChanged.connect(on_engine_mode_changed)
+                self.cmb_batch_vox_preset.currentIndexChanged.connect(on_vox_preset_changed)
+                self.btn_apply_voxcpm_all.clicked.connect(on_apply_vox_all_clicked)
+
+                # Check if saved settings already have VoxCPM
+                try:
+                    from settings_manager import get_batch_auto_dub_config
+                    init_v = get_batch_auto_dub_config().get('voice_mode', '')
+                    if voxcpm_support.is_voxcpm_voice(init_v):
+                        self.cmb_batch_engine_mode.setCurrentIndex(1)
+                        p_idx = self.cmb_batch_vox_preset.findData(init_v)
+                        if p_idx >= 0:
+                            self.cmb_batch_vox_preset.setCurrentIndex(p_idx)
+                        self.cmb_batch_vox_preset.setVisible(True)
+                        self.btn_apply_voxcpm_all.setVisible(True)
+                except Exception:
+                    pass
+
+                row4_layout.addStretch()
+                vocal_layout.addLayout(row4_layout)
+
                 # Insert into parent layout right after bulk controls
                 insert_pos = bulk_idx + 1 if bulk_idx >= 0 else 4
                 parent_layout.insertWidget(insert_pos, vocal_frame)
@@ -615,6 +744,22 @@ def create_enhanced_batch_mapping_dialog_class(base_dialog_class):
             super()._build_rows()
             try:
                 for r in range(self.table.rowCount()):
+                    # Ensure row voice combo has VoxCPM voices and assigned voice selected
+                    voice_combo = self.table.cellWidget(r, 3)
+                    if voice_combo:
+                        import voxcpm_support
+                        for lbl, vid, _ in voxcpm_support.VOXCPM_BUILTIN_VOICES:
+                            if voice_combo.findData(vid) < 0:
+                                voice_combo.addItem(lbl, vid)
+                        v_path = self.video_files[r] if (hasattr(self, 'video_files') and r < len(self.video_files)) else None
+                        if v_path and hasattr(self, 'voice_assignments') and v_path in self.voice_assignments:
+                            target_v = self.voice_assignments[v_path]
+                            idx_v = voice_combo.findData(target_v)
+                            if idx_v >= 0 and voice_combo.currentIndex() != idx_v:
+                                voice_combo.blockSignals(True)
+                                voice_combo.setCurrentIndex(idx_v)
+                                voice_combo.blockSignals(False)
+
                     # Set transparent background on cell container widgets to blend seamlessly
                     echo_widget = self.table.cellWidget(r, 6)
                     if echo_widget:
@@ -908,12 +1053,13 @@ def create_enhanced_batch_mapping_dialog_class(base_dialog_class):
                 from settings_manager import save_export_audio_mix_config, get_batch_auto_dub_config, save_batch_auto_dub_config
                 save_export_audio_mix_config(bg_percent, ai_percent)
                 auto_cfg = get_batch_auto_dub_config()
+                saved_voice = self.bulk_voice_combo.currentData() if hasattr(self, "bulk_voice_combo") else auto_cfg.get('voice_mode', 'km-KH-SreymomNeural')
                 save_batch_auto_dub_config(
                     auto_cfg.get('api_keys', []),
                     auto_cfg.get('target_language', 'km'),
                     remove_vocal,
                     output_dir,
-                    auto_cfg.get('voice_mode', 'km-KH-SreymomNeural'),
+                    saved_voice or 'km-KH-SreymomNeural',
                     auto_cfg.get('video_list', [])
                 )
             except Exception:
@@ -968,6 +1114,7 @@ def create_enhanced_batch_mapping_dialog_class(base_dialog_class):
                 pass
 
             # Attach audio mixing, timing sync & video quality options to every job
+            import voxcpm_support
             for j in jobs:
                 j["remove_vocal"] = remove_vocal
                 j["use_demucs"] = use_demucs
@@ -980,6 +1127,8 @@ def create_enhanced_batch_mapping_dialog_class(base_dialog_class):
                 j["compress_enabled"] = compress_enabled
                 j["allow_upscale"] = False
                 j["audio_bitrate"] = "96k"
+                j_v = j.get("voice_id", "")
+                j["tts_engine"] = "VoxCPM" if (j_v and voxcpm_support.is_voxcpm_voice(j_v)) else "EdgeTTS"
 
             self.hide()
 
@@ -1002,5 +1151,20 @@ def create_enhanced_batch_mapping_dialog_class(base_dialog_class):
             progress_dialog.exec_()
 
             super().accept()
+
+    # Populate augmented VOICE_OPTIONS on EnhancedBatchSrtMappingDialog
+    try:
+        import voxcpm_support
+        vox_opts = [(label, vid) for label, vid, _ in voxcpm_support.VOXCPM_BUILTIN_VOICES]
+        base_opts = list(getattr(base_dialog_class, 'VOICE_OPTIONS', []))
+        existing_ids = {opt[1] for opt in base_opts if len(opt) >= 2}
+        merged_opts = list(base_opts)
+        for opt in vox_opts:
+            if opt[1] not in existing_ids:
+                merged_opts.append(opt)
+                existing_ids.add(opt[1])
+        EnhancedBatchSrtMappingDialog.VOICE_OPTIONS = merged_opts
+    except Exception as e:
+        print(f"[BatchLoader] Augmented VOICE_OPTIONS notice: {e}")
 
     return EnhancedBatchSrtMappingDialog

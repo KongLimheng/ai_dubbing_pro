@@ -65,6 +65,14 @@ def launch_app():
 
     os.environ.setdefault('KMP_DUPLICATE_LIB_OK', 'TRUE')
     os.environ.setdefault('OMP_NUM_THREADS', '1')
+    os.environ.setdefault('OPENCV_FFMPEG_LOGLEVEL', '-8')
+
+    try:
+        import cv2
+        if hasattr(cv2, 'setLogLevel'):
+            cv2.setLogLevel(0)
+    except Exception:
+        pass
 
     try:
         torch_lib = os.path.join(

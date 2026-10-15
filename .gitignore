@@ -25,7 +25,8 @@ _internal/
 AI_Dubber_Ultimate_v1.2.9.exe_extracted/
 temp_audio/
 scratch/
-test_*.py
+/test_*.py
+!tests/
 
 # OS & Editor files
 .DS_Store

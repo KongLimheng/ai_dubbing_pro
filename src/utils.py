@@ -13,11 +13,25 @@ except ImportError:
         @staticmethod
         def addLibraryPath(path):
             pass
-from runtime_paths import app_path, get_bundle_dir, resource_path
+from runtime_paths import app_path, get_bundle_dir, get_user_bin_dir, resource_path
 
 for stream in (sys.stdout, sys.stderr):
     if hasattr(stream, "reconfigure"):
         stream.reconfigure(errors="replace")
+
+
+def configure_multimedia_env():
+    """Configure environment variables and OpenCV log level to prevent hardware decoder errors."""
+    os.environ.setdefault("OPENCV_FFMPEG_LOGLEVEL", "-8")
+    try:
+        import cv2
+        if hasattr(cv2, "setLogLevel"):
+            cv2.setLogLevel(0)
+    except Exception:
+        pass
+
+
+configure_multimedia_env()
 
 
 def _is_startup_verbose():
@@ -367,6 +381,8 @@ def get_ffmpeg_path():
         _startup_log(f"Using system FFmpeg: {system_ffmpeg}")
         return system_ffmpeg
     for candidate in [
+        os.path.join(get_user_bin_dir(), "ffmpeg.exe"),
+        os.path.join(get_user_bin_dir(), "ffmpeg"),
         resource_path("ffmpeg.exe"),
         app_path("ffmpeg.exe"),
         resource_path("ffmpeg"),
@@ -627,6 +643,8 @@ def resolve_voice_and_pitch(voice_str, pitch_str="+0Hz"):
     into the underlying base neural voice + modified pitch offset.
     """
     vid = normalize_voice_id(voice_str)
+    if vid and "voxcpm" in str(vid).lower():
+        return vid, pitch_str or "+0Hz"
 
     pitch_val = 0
     if pitch_str is not None:

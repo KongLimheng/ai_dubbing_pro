@@ -47,6 +47,94 @@ VOXCPM_PROMPT_PRESETS = {
     ],
 }
 
+# Standard built-in VoxCPM voice options for dropdown selection
+VOXCPM_BUILTIN_VOICES = [
+    ("AI VoxCPM2 - Female (Sreymom / Normal)", "voxcpm:female:normal", "A natural, clear, expressive female voice speaking fluent Khmer."),
+    ("AI VoxCPM2 - Female (Storyteller)", "voxcpm:female:storyteller", "A captivating, warm, narrative female voice telling a story in Khmer."),
+    ("AI VoxCPM2 - Female (Excited)", "voxcpm:female:excited", "An energetic, happy, expressive young female voice speaking fluent Khmer."),
+    ("AI VoxCPM2 - Female (Sad)", "voxcpm:female:sad", "A gentle, emotional, somber female voice speaking fluent Khmer."),
+    ("AI VoxCPM2 - Female (Whisper)", "voxcpm:female:whisper", "A soft, intimate, whispered female voice speaking fluent Khmer."),
+    ("AI VoxCPM2 - Male (Piseth / Normal)", "voxcpm:male:normal", "A natural, calm, confident male voice speaking fluent Khmer."),
+    ("AI VoxCPM2 - Male (Authoritative)", "voxcpm:male:serious", "A deep, authoritative, serious male voice speaking fluent Khmer."),
+    ("AI VoxCPM2 - Male (Storyteller)", "voxcpm:male:storyteller", "A resonant, engaging, narrative male voice telling a story in Khmer."),
+    ("AI VoxCPM2 - Male (Excited)", "voxcpm:male:excited", "An enthusiastic, energetic, expressive male voice speaking fluent Khmer."),
+    ("AI VoxCPM2 - Male (Angry)", "voxcpm:male:angry", "An intense, harsh, angry male voice speaking fluent Khmer."),
+    ("AI VoxCPM2 - Boy (Playful)", "voxcpm:boy:normal", "A lively, innocent, clear young boy voice speaking fluent Khmer."),
+    ("AI VoxCPM2 - Girl (Sweet / Cute)", "voxcpm:girl:normal", "A sweet, cute, youthful young girl voice speaking fluent Khmer."),
+    ("AI VoxCPM2 - Old Man (Storyteller)", "voxcpm:old_man:storyteller", "An aged, deep, traditional storytelling grandfather voice in Khmer."),
+    ("AI VoxCPM2 - Old Woman (Gentle)", "voxcpm:old_woman:normal", "A gentle, kind, elderly grandmother voice speaking fluent Khmer."),
+]
+
+
+def resolve_voxcpm_voice_preset(voice_id):
+    """
+    Resolves a voice ID into a VoxCPM prompt preset dictionary.
+    Returns:
+        dict with keys: 'role', 'style', 'control_prompt', 'display_name', 'voice_id'
+    """
+    if not isinstance(voice_id, str):
+        return {}
+    v = voice_id.strip()
+    low = v.lower()
+
+    # Check exact match in VOXCPM_BUILTIN_VOICES
+    for label, vid, prompt in VOXCPM_BUILTIN_VOICES:
+        if low == vid.lower():
+            parts = vid.split(":")
+            role = parts[1] if len(parts) > 1 else "female"
+            style = parts[2] if len(parts) > 2 else "normal"
+            return {
+                "role": role,
+                "style": style,
+                "control_prompt": prompt,
+                "display_name": label,
+                "voice_id": vid,
+            }
+
+    # Check general pattern voxcpm:<role> or voxcpm:<role>:<style>
+    for prefix in ("voxcpm2:", "voxcpm:"):
+        if low.startswith(prefix):
+            remainder = low[len(prefix):].strip()
+            parts = remainder.split(":")
+            role = parts[0] if parts else "female"
+            style = parts[1] if len(parts) > 1 else "normal"
+
+            if role in ("sreymom", "woman", "girl_woman"):
+                role = "female"
+            elif role in ("piseth", "man"):
+                role = "male"
+            elif role in ("oldman", "grandpa", "ta"):
+                role = "old_man"
+            elif role in ("oldwoman", "grandma", "yeay"):
+                role = "old_woman"
+
+            presets = VOXCPM_PROMPT_PRESETS.get(role, VOXCPM_PROMPT_PRESETS.get("female", []))
+            prompt = presets[0][1] if presets else "A natural, clear expressive voice speaking fluent Khmer."
+            display_style = style
+            for p_label, p_text in presets:
+                if style in p_label.lower():
+                    prompt = p_text
+                    display_style = p_label
+                    break
+
+            return {
+                "role": role,
+                "style": style,
+                "control_prompt": prompt,
+                "display_name": f"AI VoxCPM2 - {role.title()} ({display_style})",
+                "voice_id": v,
+            }
+
+    return {}
+
+
+def is_voxcpm_builtin_voice(voice):
+    """Checks if voice is one of the built-in VoxCPM2 preset voices."""
+    if not isinstance(voice, str):
+        return False
+    v = voice.strip().lower()
+    return v.startswith(("voxcpm:", "voxcpm2:")) and not is_voxcpm_reference_voice(voice)
+
 
 def make_voxcpm_reference_voice_id(audio_path, prompt_text="", control_prompt="", reference_prompt_text="", control=None, **kwargs):
     """
@@ -169,10 +257,32 @@ def get_voxcpm_install_status(*args, **kwargs):
                 break
 
     python_exe = _find_python_executable(python_path)
-
-    has_source = bool(source_dir and os.path.isdir(os.path.join(source_dir, "src", "voxcpm")))
-    has_model = bool(model_path and os.path.exists(os.path.join(model_path, "config.json")))
     has_python = bool(python_exe and os.path.exists(python_exe))
+
+    # 1. Check if voxcpm is installed as a Python package in target Python
+    has_package = False
+    package_version = ""
+    if has_python:
+        try:
+            chk_pkg = subprocess.run(
+                [python_exe, "-c", "import voxcpm; import importlib.metadata; print(importlib.metadata.version('voxcpm') if hasattr(importlib, 'metadata') else 'installed')"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=8
+            )
+            if chk_pkg.returncode == 0:
+                has_package = True
+                out_lines = chk_pkg.stdout.strip().splitlines()
+                package_version = out_lines[-1].strip() if out_lines else "installed"
+        except Exception:
+            pass
+
+    # 2. Legacy fallback: check if source_dir contains voxcpm repository source
+    has_source_dir = bool(source_dir and os.path.isdir(os.path.join(source_dir, "src", "voxcpm")))
+    has_engine = has_package or has_source_dir
+
+    has_model = bool(model_path and os.path.exists(os.path.join(model_path, "config.json")))
 
     # Check for required python dependencies in the target python
     has_deps = True
@@ -192,16 +302,17 @@ def get_voxcpm_install_status(*args, **kwargs):
         except Exception as e:
             has_deps = True
 
-    ready = has_source and has_model and has_python and has_deps
-    installed = has_source or has_model
+    ready = has_engine and has_model and has_python and has_deps
+    installed = has_engine or has_model
 
     if ready:
-        message = "VoxCPM2 data/runtime is ready."
+        ver_tag = f" (v{package_version})" if package_version and package_version != "installed" else ""
+        message = f"VoxCPM2 package/runtime is ready{ver_tag}."
         status_str = "ready"
     elif installed:
         missing = []
-        if not has_source:
-            missing.append("VoxCPM source")
+        if not has_engine:
+            missing.append("voxcpm package")
         if not has_model:
             missing.append("VoxCPM2 model")
         if not has_python:
@@ -221,6 +332,8 @@ def get_voxcpm_install_status(*args, **kwargs):
         "status": status_str,
         "message": message,
         "source_dir": source_dir,
+        "has_package": has_package,
+        "package_version": package_version,
         "model_path": model_path,
         "python_path": python_exe,
     }
@@ -249,31 +362,61 @@ def generate_voxcpm_audio(text, voice_id, output_path, progress_callback=None, c
         if not control_instruction:
             control_instruction = ref_settings.get("control", "")
 
+    # Auto-resolve control prompt from built-in preset if not already specified
+    if not control_instruction and not ref_path and is_voxcpm_voice(voice_id):
+        preset_info = resolve_voxcpm_voice_preset(voice_id)
+        if preset_info and preset_info.get("control_prompt"):
+            control_instruction = preset_info["control_prompt"]
+
     if progress_callback:
         try:
             progress_callback("Preparing VoxCPM2 synthesis...")
         except Exception:
             pass
 
-    source_dir = status["source_dir"]
+    source_dir = status.get("source_dir", "")
     model_path = status["model_path"]
     python_exe = status["python_path"]
 
     # Build runner command for standalone subprocess inference
     runner_code = f"""
 import sys, os, re
-sys.path.insert(0, os.path.join({repr(source_dir)}, 'src'))
+
+# Optional fallback to local source dir if specified and present
+custom_source = {repr(source_dir)}
+if custom_source and os.path.isdir(os.path.join(custom_source, 'src', 'voxcpm')):
+    sys.path.insert(0, os.path.join(custom_source, 'src'))
 
 try:
     from voxcpm import VoxCPM
     import soundfile as sf
+    import torch
 
-    model = VoxCPM(
-        voxcpm_model_path={repr(model_path)},
-        zipenhancer_model_path=None,
-        enable_denoiser=False,
-        optimize=False
-    )
+    target_dev = "cpu"
+    try:
+        if torch.cuda.is_available():
+            _t = torch.zeros(1, device="cuda")
+            del _t
+            target_dev = "cuda"
+    except Exception:
+        target_dev = "cpu"
+
+    m_path = {repr(model_path)}
+    if m_path and os.path.isdir(m_path) and os.path.exists(os.path.join(m_path, 'config.json')):
+        model = VoxCPM(
+            voxcpm_model_path=m_path,
+            zipenhancer_model_path=None,
+            enable_denoiser=False,
+            optimize=False,
+            device=target_dev
+        )
+    else:
+        model = VoxCPM.from_pretrained(
+            hf_model_id=m_path or "openbmb/VoxCPM2",
+            load_denoiser=False,
+            optimize=False,
+            device=target_dev
+        )
 
     ctrl = re.sub(r"[()（）]", "", {repr(control_instruction or "")}).strip()
     raw_text = {repr(text)}.strip()

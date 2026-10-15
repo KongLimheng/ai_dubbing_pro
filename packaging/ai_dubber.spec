@@ -11,6 +11,18 @@ spec_dir = os.path.abspath(SPECPATH)
 project_root = os.path.abspath(os.path.join(spec_dir, ".."))
 src_dir = os.path.join(project_root, "src")
 
+# Explicitly enforce absolute workpath and distpath, ensuring workpath exists
+try:
+    import PyInstaller.config
+    workpath_dir = os.path.abspath(os.path.join(project_root, "build", "ai_dubber"))
+    distpath_dir = os.path.abspath(os.path.join(project_root, "dist"))
+    PyInstaller.config.CONF['workpath'] = workpath_dir
+    PyInstaller.config.CONF['distpath'] = distpath_dir
+    os.makedirs(workpath_dir, exist_ok=True)
+    os.makedirs(distpath_dir, exist_ok=True)
+except Exception:
+    pass
+
 # Determine platform icon
 if sys.platform == "win32":
     app_icon = os.path.join(project_root, "resources", "icon.ico")
@@ -86,11 +98,17 @@ excludes = [
     "matplotlib",
     "scipy",
     "tests",
+    "unittest",
+    "pytest",
+    "torch.testing",
+    "torch.distributed",
+    "IPython",
+    "notebook",
 ]
 
 a = Analysis(
     [os.path.join(src_dir, "main.py")],
-    pathex=[src_dir, project_root],
+    pathex=[src_dir],
     binaries=[],
     datas=datas,
     hiddenimports=hidden_imports,
@@ -132,3 +150,20 @@ coll = COLLECT(
     upx_exclude=[],
     name="AI_Dubber_Ultimate",
 )
+
+if sys.platform == "darwin":
+    app = BUNDLE(
+        coll,
+        name="AI Dubber Ultimate.app",
+        icon=app_icon if os.path.exists(app_icon) else None,
+        bundle_identifier="com.aidubber.ultimate",
+        info_plist={
+            "CFBundleDisplayName": "AI Dubber Ultimate",
+            "CFBundleName": "AI Dubber Ultimate",
+            "CFBundleVersion": "1.2.9",
+            "CFBundleShortVersionString": "1.2.9",
+            "NSHighResolutionCapable": "True",
+            "LSMinimumSystemVersion": "11.0",
+            "NSRequiresAquaSystemAppearance": "False",
+        },
+    )

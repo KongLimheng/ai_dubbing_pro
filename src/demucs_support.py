@@ -12,7 +12,7 @@ import shutil
 import subprocess
 import sys
 
-from runtime_paths import app_path, get_bundle_dir, resource_path
+from runtime_paths import app_path, get_bundle_dir, get_user_models_dir, resource_path
 from settings_manager import get_app_data_dir
 
 MANAGED_DEMUCS_VARIANTS = ('cuda', 'cpu')
@@ -166,6 +166,8 @@ def get_demucs_model_repo_path():
         return False
 
     candidates = (
+        get_user_models_dir('demucs'),
+        get_user_models_dir('demucs_repo'),
         resource_path('demucs_repo'),
         resource_path('models', 'demucs'),
         resource_path('build_assets', 'demucs_repo'),

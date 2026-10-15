@@ -1093,6 +1093,53 @@ if hasattr(_mod, "ExportWorker"):
 
     _mod.ExportWorker._run_command = _enhanced_export_run_command
 
+    _orig_export_tts_clip_with_retry = _mod.ExportWorker._generate_export_tts_clip_with_retry
+
+    def _enhanced_export_tts_clip_with_retry(self, text, voice_id, pitch, rate, clip_file, clip_label="clip", start_time=0.0, end_time=1.0, character_key=None, *args, **kwargs):
+        try:
+            return _orig_export_tts_clip_with_retry(self, text, voice_id, pitch, rate, clip_file, clip_label, start_time, end_time, character_key, *args, **kwargs)
+        except Exception as ex:
+            err_str = str(ex)
+            # Automatic fallback to VoxCPM2 if Edge-TTS service is busy, returns 403, or fails
+            try:
+                import voxcpm_support
+                st = voxcpm_support.get_voxcpm_install_status()
+                if st.get("ready"):
+                    print(f"[EXPORT FALLBACK] Primary TTS failed on {clip_label}: {err_str}. Synthesizing with VoxCPM2...")
+                    self.progress.emit(f"🔄 Service busy on {clip_label}. Synthesizing with VoxCPM2 fallback...")
+
+                    low_v = str(voice_id or "").lower()
+                    if any(k in low_v for k in ("piseth", "male", "man")):
+                        fallback_vox = "voxcpm:male:normal" if "boy" not in low_v else "voxcpm:boy:normal"
+                    elif any(k in low_v for k in ("old", "grandpa", "ta", "grandma", "yeay")):
+                        fallback_vox = "voxcpm:old_woman:normal"
+                    elif "girl" in low_v:
+                        fallback_vox = "voxcpm:girl:normal"
+                    else:
+                        fallback_vox = "voxcpm:female:normal"
+
+                    os.makedirs(os.path.dirname(clip_file), exist_ok=True)
+                    voxcpm_support.generate_voxcpm_audio(
+                        text=text,
+                        voice_id=fallback_vox,
+                        output_path=clip_file,
+                        progress_callback=lambda msg, pct=None: self.progress.emit(f"VoxCPM2 ({clip_label}): {msg}")
+                    )
+                    self._validate_export_clip_file(clip_file, clip_label)
+                    return {
+                        "used_azure": False,
+                        "used_edge": False,
+                        "used_voxcpm": True,
+                        "used_fallback": True,
+                        "file_size": os.path.getsize(clip_file),
+                    }
+            except Exception as fb_err:
+                print(f"[EXPORT FALLBACK] VoxCPM2 fallback attempt also failed: {fb_err}")
+
+            raise
+
+    _mod.ExportWorker._generate_export_tts_clip_with_retry = _enhanced_export_tts_clip_with_retry
+
 
 _mod.VOXCPM2_ENABLED = True
 _mod.get_hardware_config = settings_manager.get_hardware_config

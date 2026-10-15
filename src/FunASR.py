@@ -161,6 +161,31 @@ def _snapshot_download_with_progress(repo_id: str, local_dir: str, progress_call
     return path
 
 
+def _resolve_funasr_cache_root(cfg_download_dir: Optional[str] = None) -> str:
+    """Resolve FunASR model cache root, checking user data and app directories."""
+    explicit = (cfg_download_dir or "").strip()
+    if explicit:
+        return explicit
+    try:
+        from runtime_paths import get_user_models_dir, get_app_dir
+        user_cache = get_user_models_dir("funasr_hf_cache")
+        if os.path.isdir(user_cache):
+            return user_cache
+        app_cache = os.path.join(get_app_dir(), "models", "funasr_hf_cache")
+        if os.path.isdir(app_cache):
+            return app_cache
+        return user_cache
+    except Exception:
+        pass
+    try:
+        cwd_cache = os.path.join(os.getcwd(), "models", "funasr_hf_cache")
+        if os.path.isdir(cwd_cache):
+            return cwd_cache
+    except Exception:
+        pass
+    return os.path.join(tempfile.gettempdir(), "aidubber_funasr_models")
+
+
 def _ensure_models_downloaded(cfg: FunASRConfig, progress_callback=None) -> None:
     """
     Best-effort pre-download of FunASR dependencies so we can show a download %.
@@ -171,18 +196,7 @@ def _ensure_models_downloaded(cfg: FunASRConfig, progress_callback=None) -> None
     if (cfg.model_hub or "").lower() != "hf":
         return
 
-    download_root = (cfg.download_dir or "").strip()
-    if not download_root:
-        # Prefer an app-local cache folder when present (so packaged installers can bundle models).
-        try:
-            app_local = os.path.join(os.getcwd(), "models", "funasr_hf_cache")
-            if os.path.isdir(app_local):
-                download_root = app_local
-        except Exception:
-            download_root = ""
-    if not download_root:
-        download_root = os.path.join(
-            tempfile.gettempdir(), "aidubber_funasr_models")
+    download_root = _resolve_funasr_cache_root(cfg.download_dir)
     os.makedirs(download_root, exist_ok=True)
 
     # Help downstream libraries (FunASR / HF hub / transformers) reuse the same cache.
@@ -265,17 +279,7 @@ def _resolve_to_cached_path(cfg: FunASRConfig, model_name_or_path: Optional[str]
     if (cfg.model_hub or "").lower() != "hf":
         return raw
 
-    download_root = (cfg.download_dir or "").strip()
-    if not download_root:
-        try:
-            app_local = os.path.join(os.getcwd(), "models", "funasr_hf_cache")
-            if os.path.isdir(app_local):
-                download_root = app_local
-        except Exception:
-            download_root = ""
-    if not download_root:
-        download_root = os.path.join(
-            tempfile.gettempdir(), "aidubber_funasr_models")
+    download_root = _resolve_funasr_cache_root(cfg.download_dir)
 
     repo_id = _resolve_hf_repo_id(raw)
     local_dir = _local_dir_for_repo(download_root, repo_id)

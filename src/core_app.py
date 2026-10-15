@@ -658,6 +658,16 @@ def _dubbing_init_patched(self, *args, **kwargs):
                             except Exception as _sp_e:
                                 print('[WARN] Social post button init error:', _sp_e)
 
+                            # VoxCPM TTS Generation button in toolbar
+                            try:
+                                self.btn_voxcpm_tts = QPushButton("🎙️ VoxCPM TTS")
+                                self.btn_voxcpm_tts.setObjectName("btn_voxcpm_tts")
+                                self.btn_voxcpm_tts.setToolTip("Generate TTS audio for all segments using VoxCPM2")
+                                self.btn_voxcpm_tts.clicked.connect(lambda: self.generate_all_segments_tts_with_voxcpm())
+                                row2.addWidget(self.btn_voxcpm_tts)
+                            except Exception as _vx_e:
+                                print('[WARN] VoxCPM TTS button init error:', _vx_e)
+
                             row2.addStretch()
                             right_col.insertLayout(2, row2)
 
@@ -930,6 +940,14 @@ def _dubbing_init_patched(self, *args, **kwargs):
     try:
         if hasattr(self, 'btn_voxcpm2_tester') and self.btn_voxcpm2_tester:
             self.btn_voxcpm2_tester.setVisible(True)
+        if hasattr(self, 'combo_voice_all') and self.combo_voice_all:
+            try:
+                import voxcpm_support
+                for label, vid, _ in voxcpm_support.VOXCPM_BUILTIN_VOICES:
+                    if self.combo_voice_all.findData(vid) < 0:
+                        self.combo_voice_all.addItem(label, vid)
+            except Exception:
+                pass
         if hasattr(self, 'btn_rvc') and self.btn_rvc:
             self.btn_rvc.setVisible(True)
         if hasattr(self, 'chk_voice_clone') and self.chk_voice_clone:
@@ -1107,7 +1125,135 @@ if 'DubbingApp' in globals():
     globals()['DubbingApp']._open_social_post_window = _open_social_post_window
 _mod.DubbingApp.__init__ = _dubbing_init_patched
 
-# Cross-platform VoxCPM path detection
+# Cross-platform VoxCPM package worker and enhanced path detection
+class VoxCPMPackageInstallWorker(QThread):
+    """
+    Background worker for installing the official 'voxcpm' Python package
+    and ensuring the VoxCPM2 model weights are available.
+    """
+    progress = pyqtSignal(str)
+    progress_value = pyqtSignal(int)
+    finished = pyqtSignal(bool)
+    error = pyqtSignal(str)
+
+    def __init__(self, target_python=None, install_dir=None, parent=None):
+        super().__init__(parent)
+        self.target_python = target_python
+        self.install_dir = install_dir or os.getcwd()
+
+    def run(self):
+        try:
+            self.progress.emit("Starting VoxCPM2 package and model setup...")
+            self.progress_value.emit(5)
+
+            py_exe = self.target_python
+            if not py_exe or not os.path.exists(py_exe):
+                py_exe = voxcpm_support._find_python_executable()
+            if not py_exe or not os.path.exists(py_exe):
+                py_exe = sys.executable
+
+            self.progress.emit(f"Using Python runtime: {py_exe}")
+            self.progress_value.emit(10)
+
+            uv_bin = shutil.which("uv")
+            flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+
+            def _run_cmd(cmd, base_val, max_val, title):
+                self.progress.emit(title)
+                self.progress_value.emit(base_val)
+                proc = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                    creationflags=flags
+                )
+                curr = base_val
+                for line in iter(proc.stdout.readline, ''):
+                    if self.isInterruptionRequested():
+                        proc.terminate()
+                        raise RuntimeError("Installation cancelled.")
+                    line_clean = line.strip()
+                    if not line_clean:
+                        continue
+                    self.progress.emit(line_clean[:120])
+                    if curr < max_val:
+                        curr = min(max_val, curr + 1)
+                        self.progress_value.emit(curr)
+                proc.wait()
+                if proc.returncode != 0:
+                    raise RuntimeError(f"Command failed (code {proc.returncode}): {' '.join(cmd)}")
+
+            # Step 1: Install voxcpm package via pip / uv pip
+            if uv_bin:
+                install_cmd = [uv_bin, "pip", "install", "--python", py_exe, "voxcpm>=2.0.0"]
+            else:
+                install_cmd = [py_exe, "-m", "pip", "install", "voxcpm>=2.0.0"]
+
+            _run_cmd(install_cmd, 15, 65, "[1/2] Installing 'voxcpm' package from PyPI...")
+
+            # Step 2: Verify voxcpm package import
+            self.progress.emit("Verifying voxcpm package installation...")
+            self.progress_value.emit(70)
+            verify_cmd = [py_exe, "-c", "import voxcpm; print('voxcpm imported successfully')"]
+            verify_res = subprocess.run(
+                verify_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=20,
+                creationflags=flags
+            )
+            if verify_res.returncode != 0:
+                err_detail = (verify_res.stderr or verify_res.stdout or "").strip()
+                raise RuntimeError(f"voxcpm verification failed: {err_detail}")
+
+            self.progress.emit("voxcpm package verified successfully.")
+            self.progress_value.emit(75)
+
+            # Step 3: Verify or download VoxCPM2 model
+            self.progress.emit("[2/2] Checking VoxCPM2 model weights...")
+            self.progress_value.emit(80)
+
+            model_dir = os.path.join(self.install_dir, "models", "openbmb__VoxCPM2")
+            if not os.path.exists(os.path.join(model_dir, "config.json")):
+                for cand in ("models/openbmb__VoxCPM2", "models/VoxCPM2", "_internal/models/openbmb__VoxCPM2"):
+                    full_cand = os.path.abspath(cand)
+                    if os.path.exists(os.path.join(full_cand, "config.json")):
+                        model_dir = full_cand
+                        break
+
+            if not os.path.exists(os.path.join(model_dir, "config.json")):
+                self.progress.emit("Downloading VoxCPM2 model weights from Hugging Face...")
+                self.progress_value.emit(85)
+                dl_script = f"""
+import sys, os
+from huggingface_hub import snapshot_download
+target = {repr(model_dir)}
+os.makedirs(target, exist_ok=True)
+print("Downloading openbmb/VoxCPM2...")
+snapshot_download(repo_id="openbmb/VoxCPM2", local_dir=target, resume_download=True)
+print("SUCCESS")
+"""
+                _run_cmd([py_exe, "-c", dl_script], 85, 95, "Downloading openbmb/VoxCPM2 weights...")
+
+            # Step 4: Save paths to settings
+            settings_manager.save_voxcpm_install_config(
+                source_dir="",  # package mode: no source_dir needed
+                model_path=model_dir if os.path.exists(os.path.join(model_dir, "config.json")) else "openbmb/VoxCPM2",
+                python_path=py_exe
+            )
+
+            self.progress.emit("[OK] VoxCPM2 package and models ready!")
+            self.progress_value.emit(100)
+            self.finished.emit(True)
+
+        except Exception as e:
+            self.progress.emit(f"Error: {str(e)}")
+            self.error.emit(str(e))
+
+
 _orig_detect_voxcpm = _mod.DubbingApp._detect_voxcpm_install_paths_in_folder
 
 
@@ -1124,10 +1270,220 @@ def _detect_voxcpm_cross_platform(self, folder_path):
                 break
     if not py_exe and os.path.exists(sys.executable):
         py_exe = sys.executable
+
+    # Detect model folder directly if config.json exists
+    if not model:
+        if os.path.isfile(os.path.join(folder_path, "config.json")):
+            model = os.path.abspath(folder_path)
+        else:
+            for root, dirs, files in os.walk(folder_path):
+                if "config.json" in files:
+                    model = os.path.abspath(root)
+                    break
     return source, model, py_exe
 
 
+def _ensure_voxcpm2_ready_or_prompt_enhanced(self):
+    status = voxcpm_support.get_voxcpm_install_status()
+    if status.get("ready"):
+        return True
+
+    dialog = QDialog(self)
+    dialog.setWindowTitle("VoxCPM2 Setup")
+    dialog.setMinimumWidth(560)
+    dialog.setModal(True)
+    layout = QVBoxLayout(dialog)
+    layout.setContentsMargins(22, 22, 22, 22)
+    layout.setSpacing(14)
+
+    from PyQt5.QtWidgets import QLabel, QPushButton, QHBoxLayout
+    title = QLabel("VoxCPM2 Setup Required", dialog)
+    t_font = title.font()
+    t_font.setBold(True)
+    t_font.setPointSize(max(14, t_font.pointSize() + 2))
+    title.setFont(t_font)
+    layout.addWidget(title)
+
+    msg = status.get("message", "VoxCPM2 is not installed yet.")
+    details = QLabel(
+        f"{msg}\n\n"
+        "VoxCPM2 provides high-fidelity voice synthesis and cloning using the official 'voxcpm' Python package.\n"
+        "You can install the voxcpm package and models automatically, select an existing model folder, continue anyway, or cancel.",
+        dialog
+    )
+    details.setWordWrap(True)
+    layout.addWidget(details)
+
+    btn_row = QHBoxLayout()
+    btn_install = QPushButton("📦 Install voxcpm Package & Models", dialog)
+    btn_install.setStyleSheet("background-color: #0F766E; color: white; padding: 8px 16px; font-weight: bold;")
+    btn_choose = QPushButton("📂 Select Model Folder", dialog)
+    btn_choose.setStyleSheet("padding: 8px 16px;")
+
+    btn_row.addWidget(btn_install)
+    btn_row.addWidget(btn_choose)
+    btn_row.addStretch()
+    layout.addLayout(btn_row)
+
+    bottom_row = QHBoxLayout()
+    btn_continue = QPushButton("Continue Anyway", dialog)
+    btn_cancel = QPushButton("Cancel", dialog)
+    bottom_row.addStretch()
+    bottom_row.addWidget(btn_continue)
+    bottom_row.addWidget(btn_cancel)
+    layout.addLayout(bottom_row)
+
+    dialog.action = None
+
+    def _on_install():
+        dialog.action = "install"
+        dialog.accept()
+
+    def _on_choose():
+        dialog.action = "choose"
+        dialog.accept()
+
+    def _on_continue():
+        dialog.action = "continue"
+        dialog.accept()
+
+    btn_install.clicked.connect(_on_install)
+    btn_choose.clicked.connect(_on_choose)
+    btn_continue.clicked.connect(_on_continue)
+    btn_cancel.clicked.connect(dialog.reject)
+
+    if dialog.exec_() != QDialog.Accepted:
+        return False
+
+    if dialog.action == "install":
+        return self._download_voxcpm2_package(dialog)
+    elif dialog.action == "choose":
+        return self._choose_existing_voxcpm_install_folder(dialog)
+    elif dialog.action == "continue":
+        return True
+    return False
+
+
+def _download_voxcpm2_package_enhanced(self, parent_dialog=None):
+    from runtime_paths import get_app_dir
+    from PyQt5.QtWidgets import QProgressBar, QDialogButtonBox
+    config = settings_manager.get_voxcpm_install_config()
+    py_path = config.get("python_path", "")
+    install_dir = get_app_dir()
+
+    progress_dialog = QDialog(parent_dialog or self)
+    progress_dialog.setWindowTitle("Installing VoxCPM2 Package & Models")
+    progress_dialog.setMinimumWidth(540)
+    p_layout = QVBoxLayout(progress_dialog)
+    p_layout.setContentsMargins(20, 20, 20, 20)
+    p_layout.setSpacing(12)
+
+    from PyQt5.QtWidgets import QLabel
+    status_label = QLabel("Preparing VoxCPM2 package and models installation...", progress_dialog)
+    status_label.setWordWrap(True)
+    p_layout.addWidget(status_label)
+
+    p_bar = QProgressBar(progress_dialog)
+    p_bar.setRange(0, 100)
+    p_bar.setValue(5)
+    p_layout.addWidget(p_bar)
+
+    btn_box = QDialogButtonBox(QDialogButtonBox.Cancel, progress_dialog)
+    p_layout.addWidget(btn_box)
+
+    worker = VoxCPMPackageInstallWorker(target_python=py_path, install_dir=install_dir, parent=progress_dialog)
+
+    def on_progress(text):
+        status_label.setText(text)
+
+    def on_val(val):
+        p_bar.setValue(val)
+
+    def on_finished(ok):
+        btn_box.clear()
+        btn_box.addButton(QDialogButtonBox.Ok)
+        status = voxcpm_support.get_voxcpm_install_status()
+        if status.get("ready"):
+            status_label.setText("✅ VoxCPM2 package and model setup completed successfully!")
+            progress_dialog.accept()
+        else:
+            status_label.setText(f"Setup finished with notice: {status.get('message', '')}")
+
+    def on_err(err_text):
+        status_label.setText(f"❌ Error: {err_text}")
+        btn_box.clear()
+        btn_box.addButton(QDialogButtonBox.Close)
+
+    btn_box.rejected.connect(progress_dialog.reject)
+    progress_dialog.rejected.connect(lambda: worker.requestInterruption())
+
+    worker.progress.connect(on_progress)
+    worker.progress_value.connect(on_val)
+    worker.finished.connect(on_finished)
+    worker.error.connect(on_err)
+
+    worker.start()
+    accepted = (progress_dialog.exec_() == QDialog.Accepted)
+    if worker.isRunning():
+        worker.requestInterruption()
+        worker.wait(1500)
+
+    status = voxcpm_support.get_voxcpm_install_status()
+    if status.get("ready"):
+        QMessageBox.information(self, "VoxCPM2", "VoxCPM2 package and model are ready.")
+        return True
+    elif accepted:
+        QMessageBox.warning(
+            self,
+            "VoxCPM2",
+            f"VoxCPM2 setup finished, but setup is still incomplete:\n\n{status.get('message', '')}"
+        )
+    return False
+
+
+def _choose_existing_voxcpm_install_folder_enhanced(self, parent_dialog=None):
+    from runtime_paths import get_app_dir
+    from PyQt5.QtWidgets import QFileDialog
+    folder = QFileDialog.getExistingDirectory(self, "Choose VoxCPM2 Model / Data Folder", get_app_dir())
+    if not folder:
+        return False
+
+    source_dir, model_path, python_path = self._detect_voxcpm_install_paths_in_folder(folder)
+    self._save_voxcpm_install_paths(source_dir, model_path, python_path)
+    status = voxcpm_support.get_voxcpm_install_status()
+    if status.get("ready"):
+        QMessageBox.information(self, "VoxCPM2", "VoxCPM2 model and runtime are ready.")
+        return True
+    else:
+        QMessageBox.warning(
+            self,
+            "VoxCPM2",
+            "I saved what I could find, but VoxCPM2 is still incomplete.\n\n"
+            + status.get("message", "")
+            + "\n\nDetected Model: " + (model_path or "None")
+            + "\nDetected Python: " + (python_path or "None")
+            + "\n\nTip: Click 'Install voxcpm Package & Models' to install the package automatically."
+        )
+        return False
+
+
+_mod._detect_voxcpm_cross_platform = _detect_voxcpm_cross_platform
+globals()['_detect_voxcpm_cross_platform'] = _detect_voxcpm_cross_platform
 _mod.DubbingApp._detect_voxcpm_install_paths_in_folder = _detect_voxcpm_cross_platform
+_mod.DubbingApp._ensure_voxcpm2_ready_or_prompt = _ensure_voxcpm2_ready_or_prompt_enhanced
+_mod.DubbingApp._download_voxcpm2_package = _download_voxcpm2_package_enhanced
+_mod.DubbingApp._choose_existing_voxcpm_install_folder = _choose_existing_voxcpm_install_folder_enhanced
+_mod.VoxCPM2PackageInstallWorker = VoxCPMPackageInstallWorker
+_mod.VoxCPMPackageInstallWorker = VoxCPMPackageInstallWorker
+
+if 'DubbingApp' in globals():
+    globals()['DubbingApp']._detect_voxcpm_install_paths_in_folder = _detect_voxcpm_cross_platform
+    globals()['DubbingApp']._ensure_voxcpm2_ready_or_prompt = _ensure_voxcpm2_ready_or_prompt_enhanced
+    globals()['DubbingApp']._download_voxcpm2_package = _download_voxcpm2_package_enhanced
+    globals()['DubbingApp']._choose_existing_voxcpm_install_folder = _choose_existing_voxcpm_install_folder_enhanced
+
+globals()['VoxCPM2PackageInstallWorker'] = VoxCPMPackageInstallWorker
+globals()['VoxCPMPackageInstallWorker'] = VoxCPMPackageInstallWorker
 
 _orig_dialog_init = _mod.DependencyCheckDialog.__init__
 
@@ -1798,20 +2154,25 @@ try:
 
         _orig_populate_table_row(self, r, seg)
 
-        # Ensure combobox has the exact expected voice selected
+        # Ensure combobox has VoxCPM voices and the exact expected voice selected
         try:
             if hasattr(self, "table") and r < self.table.rowCount():
                 combo = self.table.cellWidget(r, 6)
-                if combo and isinstance(seg, dict):
-                    v_target = normalize_voice_id(
-                        seg.get("voice") or seg.get("character"))
-                    idx = combo.findData(v_target)
-                    if idx < 0:
-                        idx = combo.findText(str(seg.get("voice") or ""))
-                    if idx >= 0 and combo.currentIndex() != idx:
-                        combo.blockSignals(True)
-                        combo.setCurrentIndex(idx)
-                        combo.blockSignals(False)
+                if combo:
+                    import voxcpm_support
+                    for label, vid, _ in voxcpm_support.VOXCPM_BUILTIN_VOICES:
+                        if combo.findData(vid) < 0:
+                            combo.addItem(label, vid)
+                    if isinstance(seg, dict):
+                        v_target = normalize_voice_id(
+                            seg.get("voice") or seg.get("character"))
+                        idx = combo.findData(v_target)
+                        if idx < 0:
+                            idx = combo.findText(str(seg.get("voice") or ""))
+                        if idx >= 0 and combo.currentIndex() != idx:
+                            combo.blockSignals(True)
+                            combo.setCurrentIndex(idx)
+                            combo.blockSignals(False)
         except Exception:
             pass
 
@@ -1994,5 +2355,479 @@ except Exception as _mvoice_err:
     import traceback as _tb
     print(f"[CORE] WARNING: Multi-voice export patch failed: {_mvoice_err}")
     _tb.print_exc()
+
+# ── AV1 Hardware Decoding Compatibility & Auto-Transcode ─────────────────────
+_COMPATIBLE_VIDEO_CACHE = {}
+
+
+def probe_video_codec(video_path: str) -> str:
+    """Return video stream codec (e.g. 'h264', 'av1', 'vp9') or empty string."""
+    if not video_path or not os.path.isfile(video_path):
+        return ""
+    from runtime_paths import resolve_binary_path
+    ffprobe = resolve_binary_path("ffprobe")
+    if not ffprobe or not (shutil.which(ffprobe) or os.path.exists(ffprobe)):
+        ffprobe = "ffprobe"
+    try:
+        cmd = [
+            ffprobe,
+            "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=codec_name",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            video_path,
+        ]
+        flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=5, creationflags=flags)
+        if res.returncode == 0:
+            return res.stdout.strip().lower()
+    except Exception:
+        pass
+    return ""
+
+
+def ensure_compatible_video(video_path: str, parent=None) -> str:
+    """
+    Check if video is AV1 (which causes hardware accelerated decoding errors on OpenCV / older GPUs).
+    If AV1, auto-transcodes to a clean H.264 proxy and returns its path.
+    """
+    if not video_path or not os.path.isfile(video_path):
+        return video_path
+
+    if video_path in _COMPATIBLE_VIDEO_CACHE:
+        cached = _COMPATIBLE_VIDEO_CACHE[video_path]
+        if os.path.isfile(cached) and os.path.getsize(cached) > 0:
+            return cached
+
+    codec = probe_video_codec(video_path)
+    if codec not in ("av1", "av01"):
+        return video_path
+
+    base, ext = os.path.splitext(video_path)
+    h264_candidate = f"{base}_h264.mp4"
+    if os.path.isfile(h264_candidate) and os.path.getsize(h264_candidate) > 0:
+        _COMPATIBLE_VIDEO_CACHE[video_path] = h264_candidate
+        return h264_candidate
+
+    from runtime_paths import resolve_binary_path, ensure_app_subdir
+    temp_dir = ensure_app_subdir("temp_audio")
+    import hashlib
+    h = hashlib.md5(video_path.encode("utf-8")).hexdigest()[:8]
+    cached_proxy = os.path.join(temp_dir, f"{os.path.basename(base)}_{h}_h264.mp4")
+    if os.path.isfile(cached_proxy) and os.path.getsize(cached_proxy) > 0:
+        _COMPATIBLE_VIDEO_CACHE[video_path] = cached_proxy
+        return cached_proxy
+
+    target_out = h264_candidate if os.access(os.path.dirname(video_path), os.W_OK) else cached_proxy
+    ffmpeg = resolve_binary_path("ffmpeg") or "ffmpeg"
+
+    print(f"[VIDEO COMPAT] Detected AV1 codec in '{os.path.basename(video_path)}'. Converting to universal H.264 for hardware playback compatibility...")
+    try:
+        flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        cmd = [
+            ffmpeg, "-y", "-v", "error",
+            "-i", video_path,
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-crf", "18",
+            "-c:a", "copy",
+            target_out,
+        ]
+        res = subprocess.run(cmd, capture_output=True, timeout=300, creationflags=flags)
+        if res.returncode == 0 and os.path.isfile(target_out) and os.path.getsize(target_out) > 0:
+            print(f"[VIDEO COMPAT] Successfully converted to H.264: {target_out}")
+            _COMPATIBLE_VIDEO_CACHE[video_path] = target_out
+            return target_out
+    except Exception as e:
+        print(f"[VIDEO COMPAT] AV1 transcode warning: {e}")
+
+    return video_path
+
+
+try:
+    if hasattr(_mod, "DubbingApp"):
+        # 1. Patch _load_video_path_silent
+        if hasattr(_mod.DubbingApp, "_load_video_path_silent"):
+            _orig_load_video_path_silent = _mod.DubbingApp._load_video_path_silent
+            def _load_video_path_silent_patched(self, f: str):
+                compat_f = ensure_compatible_video(f, parent=self)
+                return _orig_load_video_path_silent(self, compat_f)
+            _mod.DubbingApp._load_video_path_silent = _load_video_path_silent_patched
+            if "DubbingApp" in globals():
+                globals()["DubbingApp"]._load_video_path_silent = _load_video_path_silent_patched
+
+        # 2. Patch load_video
+        if hasattr(_mod.DubbingApp, "load_video"):
+            _orig_load_video = _mod.DubbingApp.load_video
+            def _load_video_patched(self):
+                _orig_load_video(self)
+                if hasattr(self, "video_path") and self.video_path:
+                    compat_path = ensure_compatible_video(self.video_path, parent=self)
+                    if compat_path != self.video_path:
+                        self.video_path = compat_path
+                        if hasattr(self, "extract_thumbnail"):
+                            self.extract_thumbnail(compat_path)
+            _mod.DubbingApp.load_video = _load_video_patched
+            if "DubbingApp" in globals():
+                globals()["DubbingApp"].load_video = _load_video_patched
+
+        # 3. Patch _get_shared_video_capture
+        if hasattr(_mod.DubbingApp, "_get_shared_video_capture"):
+            _orig_get_shared_video_capture = _mod.DubbingApp._get_shared_video_capture
+            def _get_shared_video_capture_patched(self, video_path):
+                compat_path = ensure_compatible_video(video_path, parent=self)
+                return _orig_get_shared_video_capture(self, compat_path)
+            _mod.DubbingApp._get_shared_video_capture = _get_shared_video_capture_patched
+            if "DubbingApp" in globals():
+                globals()["DubbingApp"]._get_shared_video_capture = _get_shared_video_capture_patched
+
+        # 4. Patch extract_thumbnail
+        if hasattr(_mod.DubbingApp, "extract_thumbnail"):
+            _orig_extract_thumbnail = _mod.DubbingApp.extract_thumbnail
+            def _extract_thumbnail_patched(self, video_path):
+                compat_path = ensure_compatible_video(video_path, parent=self)
+                return _orig_extract_thumbnail(self, compat_path)
+            _mod.DubbingApp.extract_thumbnail = _extract_thumbnail_patched
+            if "DubbingApp" in globals():
+                globals()["DubbingApp"].extract_thumbnail = _extract_thumbnail_patched
+
+        # 5. Patch _display_preview_frame_from_video
+        if hasattr(_mod.DubbingApp, "_display_preview_frame_from_video"):
+            _orig_display_preview = _mod.DubbingApp._display_preview_frame_from_video
+            def _display_preview_frame_from_video_patched(self, video_path, time_seconds=0.0):
+                compat_path = ensure_compatible_video(video_path, parent=self)
+                return _orig_display_preview(self, compat_path, time_seconds)
+            _mod.DubbingApp._display_preview_frame_from_video = _display_preview_frame_from_video_patched
+            if "DubbingApp" in globals():
+                globals()["DubbingApp"]._display_preview_frame_from_video = _display_preview_frame_from_video_patched
+
+        print("[CORE] AV1 hardware decoding protection & auto-transcode patched successfully.")
+except Exception as _av1_err:
+    print(f"[CORE] WARNING: AV1 compatibility patch notice: {_av1_err}")
+
+_mod.probe_video_codec = probe_video_codec
+_mod.ensure_compatible_video = ensure_compatible_video
+globals()['probe_video_codec'] = probe_video_codec
+globals()['ensure_compatible_video'] = ensure_compatible_video
+
+
+# ---------------------------------------------------------------------------
+# VoxCPM2 Segment TTS Generation Worker & UI Integration
+# ---------------------------------------------------------------------------
+
+class BatchVoxCPMTTSWorker(QThread):
+    progress = pyqtSignal(int, int, str)
+    clip_done = pyqtSignal(int, str, float)
+    finished = pyqtSignal(int, int)
+    cancelled = pyqtSignal()
+
+    def __init__(self, rows_to_process, parent=None):
+        super().__init__(parent)
+        self.rows_to_process = rows_to_process
+        self._is_cancelled = False
+
+    def cancel(self):
+        self._is_cancelled = True
+
+    def run(self):
+        import voxcpm_support
+        completed = 0
+        failed = 0
+        total = len(self.rows_to_process)
+
+        for idx, item in enumerate(self.rows_to_process):
+            if self._is_cancelled:
+                self.cancelled.emit()
+                return
+
+            row = item['row']
+            text = item['text']
+            voice_id = item['voice_id']
+            dest_path = item['dest_path']
+            row_label = f"clip {row + 1}/{total}"
+
+            # If cached audio already exists and is valid, skip generation
+            if os.path.exists(dest_path) and os.path.getsize(dest_path) > 1000:
+                completed += 1
+                self.progress.emit(idx + 1, total, f"✓ Cached {row_label}")
+                self.clip_done.emit(row, dest_path, 0.0)
+                continue
+
+            self.progress.emit(idx + 1, total, f"🎙️ Generating {row_label} with VoxCPM2...")
+            try:
+                os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                voxcpm_support.generate_voxcpm_audio(
+                    text=text,
+                    voice_id=voice_id,
+                    output_path=dest_path,
+                    progress_callback=lambda msg, pct=None: self.progress.emit(idx + 1, total, f"{row_label}: {msg}")
+                )
+                completed += 1
+                self.clip_done.emit(row, dest_path, 0.0)
+            except Exception as e:
+                failed += 1
+                print(f"[VOXCPM BATCH] Error on {row_label}: {e}")
+
+        self.finished.emit(completed, failed)
+
+
+def generate_segment_tts_with_voxcpm(self, row, voice_override=None):
+    """
+    Generates TTS for a single segment row using VoxCPM2.
+    """
+    import voxcpm_support
+    st = voxcpm_support.get_voxcpm_install_status()
+    if not st.get("ready"):
+        if hasattr(self, "_ensure_voxcpm2_ready_or_prompt"):
+            self._ensure_voxcpm2_ready_or_prompt()
+        return
+
+    if not hasattr(self, "table") or row < 0 or row >= self.table.rowCount():
+        return
+
+    text_item = self.table.item(row, 2)
+    text = (text_item.text() if text_item else "").strip()
+    if not text:
+        from PyQt5.QtWidgets import QMessageBox
+        QMessageBox.warning(self, "អត្ថបទទំនេរ (Empty Text)", f"Segment {row + 1} does not have any text.")
+        return
+
+    # Determine voice
+    target_voice = voice_override
+    if not target_voice:
+        combo = self.table.cellWidget(row, 6)
+        curr = combo.currentData() if combo else None
+        if curr and voxcpm_support.is_voxcpm_voice(curr):
+            target_voice = curr
+        else:
+            char_key = ""
+            if hasattr(self, "segments") and row < len(self.segments):
+                char_key = str(self.segments[row].get("character") or "").lower()
+            if any(k in char_key for k in ("male", "man", "piseth")):
+                target_voice = "voxcpm:male:normal" if "boy" not in char_key else "voxcpm:boy:normal"
+            elif any(k in char_key for k in ("old", "grandpa", "ta", "grandma", "yeay")):
+                target_voice = "voxcpm:old_woman:normal"
+            elif "girl" in char_key:
+                target_voice = "voxcpm:girl:normal"
+            else:
+                target_voice = "voxcpm:female:normal"
+
+    # Update row combo to target_voice
+    combo = self.table.cellWidget(row, 6)
+    if combo:
+        idx = combo.findData(target_voice)
+        if idx >= 0 and combo.currentIndex() != idx:
+            combo.blockSignals(True)
+            combo.setCurrentIndex(idx)
+            combo.blockSignals(False)
+
+    pitch = self.table.item(row, 3).text() if self.table.item(row, 3) else "+0Hz"
+    rate = self.table.item(row, 4).text() if self.table.item(row, 4) else "+0%"
+    dest_path = self._get_row_tts_cache_path(row, text, target_voice, rate, pitch)
+
+    if hasattr(self, "progress_bar") and hasattr(self.progress_bar, "set_status"):
+        self.progress_bar.set_status(f"Generating segment {row + 1} with VoxCPM2...")
+    from PyQt5.QtWidgets import QApplication
+    QApplication.processEvents()
+
+    try:
+        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+        voxcpm_support.generate_voxcpm_audio(
+            text=text,
+            voice_id=target_voice,
+            output_path=dest_path,
+            progress_callback=lambda msg, pct=None: (
+                self.progress_bar.set_status(f"VoxCPM2 [Row {row+1}]: {msg}")
+                if hasattr(self, "progress_bar") and hasattr(self.progress_bar, "set_status") else None
+            )
+        )
+        dur = self._get_media_duration_seconds(dest_path) if hasattr(self, "_get_media_duration_seconds") else 0.0
+        if hasattr(self, "segments") and row < len(self.segments):
+            self.segments[row]["voice"] = target_voice
+            self.segments[row]["cached_audio_path"] = dest_path
+
+        if hasattr(self, "progress_bar") and hasattr(self.progress_bar, "set_status"):
+            self.progress_bar.set_status(f"✅ Segment {row + 1} TTS generated with VoxCPM2 ({dur:.2f}s).")
+
+        from PyQt5.QtWidgets import QMessageBox
+        QMessageBox.information(
+            self,
+            "VoxCPM2 TTS",
+            f"Segment {row + 1} audio generated successfully!\n\nVoice: {target_voice}\nDuration: {dur:.2f}s\nCache: {os.path.basename(dest_path)}"
+        )
+    except Exception as ex:
+        if hasattr(self, "progress_bar") and hasattr(self.progress_bar, "set_status"):
+            self.progress_bar.set_status(f"❌ Segment {row + 1} VoxCPM2 TTS failed: {ex}")
+        from PyQt5.QtWidgets import QMessageBox
+        QMessageBox.critical(self, "VoxCPM2 Error", f"Failed to generate audio for segment {row + 1}:\n\n{ex}")
+
+
+def generate_all_segments_tts_with_voxcpm(self):
+    """
+    Batch generates TTS for all segments in the project using VoxCPM2.
+    """
+    import voxcpm_support
+    st = voxcpm_support.get_voxcpm_install_status()
+    if not st.get("ready"):
+        if hasattr(self, "_ensure_voxcpm2_ready_or_prompt"):
+            self._ensure_voxcpm2_ready_or_prompt()
+        return
+
+    if not hasattr(self, "table") or self.table.rowCount() == 0:
+        from PyQt5.QtWidgets import QMessageBox
+        QMessageBox.warning(self, "គ្មានទិន្នន័យ (No Data)", "There are no segments in the timeline table.")
+        return
+
+    rows_to_process = []
+    total = self.table.rowCount()
+
+    for r in range(total):
+        txt_it = self.table.item(r, 2)
+        txt = (txt_it.text() if txt_it else "").strip()
+        if not txt:
+            continue
+
+        combo = self.table.cellWidget(r, 6)
+        v = combo.currentData() if combo else None
+        if not v or not voxcpm_support.is_voxcpm_voice(v):
+            char_key = ""
+            if hasattr(self, "segments") and r < len(self.segments):
+                char_key = str(self.segments[r].get("character") or "").lower()
+            if any(k in char_key for k in ("male", "man", "piseth")):
+                target_v = "voxcpm:male:normal" if "boy" not in char_key else "voxcpm:boy:normal"
+            elif any(k in char_key for k in ("old", "grandpa", "ta", "grandma")):
+                target_v = "voxcpm:old_woman:normal"
+            elif "girl" in char_key:
+                target_v = "voxcpm:girl:normal"
+            else:
+                target_v = "voxcpm:female:normal"
+            if combo:
+                idx = combo.findData(target_v)
+                if idx >= 0:
+                    combo.blockSignals(True)
+                    combo.setCurrentIndex(idx)
+                    combo.blockSignals(False)
+        else:
+            target_v = v
+
+        pitch = self.table.item(r, 3).text() if self.table.item(r, 3) else "+0Hz"
+        rate = self.table.item(r, 4).text() if self.table.item(r, 4) else "+0%"
+        dest = self._get_row_tts_cache_path(r, txt, target_v, rate, pitch)
+        rows_to_process.append({
+            'row': r,
+            'text': txt,
+            'voice_id': target_v,
+            'pitch': pitch,
+            'rate': rate,
+            'dest_path': dest,
+        })
+
+    if not rows_to_process:
+        from PyQt5.QtWidgets import QMessageBox
+        QMessageBox.information(self, "No Text", "No text segments found to synthesize.")
+        return
+
+    from PyQt5.QtWidgets import QProgressDialog
+    from PyQt5.QtCore import Qt
+
+    prog_dlg = QProgressDialog(f"Initializing VoxCPM2 synthesis for {len(rows_to_process)} segments...", "Cancel", 0, len(rows_to_process), self)
+    prog_dlg.setWindowTitle("🎙️ VoxCPM2 Batch TTS Generation")
+    prog_dlg.setWindowModality(Qt.WindowModal)
+    prog_dlg.setMinimumWidth(480)
+    prog_dlg.show()
+
+    worker = BatchVoxCPMTTSWorker(rows_to_process, self)
+
+    def on_prog(curr, tot, msg):
+        prog_dlg.setValue(curr)
+        prog_dlg.setLabelText(f"[{curr}/{tot}] {msg}")
+        if hasattr(self, "progress_bar") and hasattr(self.progress_bar, "set_status"):
+            self.progress_bar.set_status(f"VoxCPM2 [{curr}/{tot}]: {msg}")
+
+    def on_clip_done(r, p, d):
+        if hasattr(self, "segments") and r < len(self.segments):
+            self.segments[r]["cached_audio_path"] = p
+
+    def on_fin(completed, failed):
+        prog_dlg.close()
+        from PyQt5.QtWidgets import QMessageBox
+        msg = f"VoxCPM2 generation complete!\n\n✅ Successfully generated: {completed}\n"
+        if failed > 0:
+            msg += f"❌ Errors: {failed}\n"
+        msg += "\nAll generated audio clips are cached and will be reused instantly during Video Export."
+        QMessageBox.information(self, "VoxCPM2 Batch TTS Complete", msg)
+
+    prog_dlg.canceled.connect(worker.cancel)
+    worker.progress.connect(on_prog)
+    worker.clip_done.connect(on_clip_done)
+    worker.finished.connect(on_fin)
+    self._batch_voxcpm_worker = worker
+    worker.start()
+
+
+def _enhanced_show_segment_actions_menu(self, global_pos, row, clicked_time=None, allow_play=True):
+    from PyQt5.QtWidgets import QMenu
+    import voxcpm_support
+
+    menu = QMenu(self)
+    play_action = None
+    vox_single_action = None
+    vox_all_action = None
+    edit_action = None
+    delete_action = None
+    sub_actions = []
+
+    if row is not None and 0 <= row < self.table.rowCount():
+        if allow_play:
+            play_action = menu.addAction("▶ Play Segment Audio")
+
+        vox_single_action = menu.addAction("🎙️ Generate TTS Segment with VoxCPM")
+        vox_all_action = menu.addAction("🎙️ Generate All TTS Segments with VoxCPM")
+
+        voice_sub = menu.addMenu("🔄 Switch Voice to VoxCPM...")
+        for label, vid, _ in voxcpm_support.VOXCPM_BUILTIN_VOICES[:6]:
+            act = voice_sub.addAction(label)
+            act.setData(vid)
+            sub_actions.append(act)
+
+        menu.addSeparator()
+        edit_action = menu.addAction("Edit Segment...")
+        delete_action = menu.addAction("Delete Segment")
+        menu.addSeparator()
+
+    add_action = menu.addAction("Add Segment...")
+    chosen = menu.exec_(global_pos)
+    if not chosen:
+        return
+
+    if chosen == edit_action:
+        self.edit_segment_via_dialog(row)
+    elif chosen == play_action and row is not None:
+        self.table.selectRow(row)
+        self.play_translated_audio_with_video(row)
+    elif chosen == vox_single_action and row is not None:
+        self.generate_segment_tts_with_voxcpm(row)
+    elif chosen == vox_all_action:
+        self.generate_all_segments_tts_with_voxcpm()
+    elif chosen in sub_actions:
+        vox_id = chosen.data()
+        self.generate_segment_tts_with_voxcpm(row, voice_override=vox_id)
+    elif chosen == delete_action and row is not None:
+        self.delete_segment(row)
+    elif chosen == add_action:
+        self.add_segment_via_dialog(row=row if row is not None else None, clicked_time=clicked_time if row is None else None)
+
+
+_mod.BatchVoxCPMTTSWorker = BatchVoxCPMTTSWorker
+_mod.DubbingApp.generate_segment_tts_with_voxcpm = generate_segment_tts_with_voxcpm
+_mod.DubbingApp.generate_all_segments_tts_with_voxcpm = generate_all_segments_tts_with_voxcpm
+_mod.DubbingApp._show_segment_actions_menu = _enhanced_show_segment_actions_menu
+if "DubbingApp" in globals():
+    globals()["DubbingApp"].generate_segment_tts_with_voxcpm = generate_segment_tts_with_voxcpm
+    globals()["DubbingApp"].generate_all_segments_tts_with_voxcpm = generate_all_segments_tts_with_voxcpm
+    globals()["DubbingApp"]._show_segment_actions_menu = _enhanced_show_segment_actions_menu
+    globals()["BatchVoxCPMTTSWorker"] = BatchVoxCPMTTSWorker
+
+print("[CORE] VoxCPM segment TTS generation & context menu options patched successfully.")
 
 sys.modules[__name__] = _mod

@@ -1,0 +1,12 @@
+Package: ai-dubber-ultimate
+Version: 1.2.9
+Section: video
+Priority: optional
+Architecture: amd64
+Depends: ffmpeg, libgl1-mesa-glx, libegl1-mesa, libxkbcommon-x11-0, libxcb-icccm4, libxcb-image0, libxcb-keysyms1, libxcb-randr0, libxcb-render-util0, libxcb-xinerama0, libxcb-xfixes0, libxcb-shape0
+Maintainer: AI Dubber Ultimate Team <support@aidubber.com>
+Homepage: https://github.com/heng-dev/ai-dubber-ultimate
+Description: AI-Powered Dubbing and Multi-Platform Video Processing Suite
+ High-performance cross-platform dubbing software featuring FunASR,
+ Demucs vocal separation, edge-tts, multi-engine translation, and video downloading.
+ Heavy models and runtimes are dynamically downloaded on demand to the user's data directory.

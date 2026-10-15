@@ -796,19 +796,24 @@ def _build_advanced_tab():
     layout.addWidget(gb_flags)
 
     # VoxCPM2 Install Paths
-    gb_vox = _make_group_box("📂 VoxCPM2 Install Paths (Advanced)")
+    gb_vox = _make_group_box("📂 VoxCPM2 Install Paths & Package Setup")
     gl = QVBoxLayout(gb_vox)
     gl.addWidget(_hint(
-        "Optional: configure external VoxCPM2 installation paths. "
-        "Leave blank to use bundled defaults."
+        "By default, VoxCPM2 uses the official 'voxcpm' Python package from PyPI and model weights in models/openbmb__VoxCPM2. "
+        "Leave paths blank to use bundled / automatic defaults."
     ))
+
+    lbl_vox_status = QLabel("Checking VoxCPM2 package status...")
+    lbl_vox_status.setStyleSheet("font-size: 11px; padding: 4px; color: #0F766E; font-weight: bold;")
+    lbl_vox_status.setWordWrap(True)
+    gl.addWidget(lbl_vox_status)
 
     path_fields = {}
 
     def _path_row(label_text, key, is_file=False):
         h = QHBoxLayout()
         lbl = QLabel(label_text)
-        lbl.setFixedWidth(130)
+        lbl.setFixedWidth(150)
         txt = QLineEdit()
         btn = QPushButton("📂")
         btn.setObjectName("secondaryBtn")
@@ -839,16 +844,17 @@ def _build_advanced_tab():
         path_fields[_key] = txt
         return h
 
-    gl.addLayout(_path_row("Source Dir:", "source_dir"))
-    gl.addLayout(_path_row("Model Path:", "model_path", is_file=True))
+    gl.addLayout(_path_row("Model Path:", "model_path", is_file=False))
     gl.addLayout(_path_row("Python Path:", "python_path", is_file=True))
+    gl.addLayout(_path_row("Source Dir (Optional):", "source_dir", is_file=False))
+    path_fields['source_dir'].setPlaceholderText("Leave empty to use official voxcpm package")
 
     gl.addWidget(_hint("Package URLs for managed downloads (optional):"))
 
     txt_pkg_url = QLineEdit()
-    txt_pkg_url.setPlaceholderText("VoxCPM2 package URL")
+    txt_pkg_url.setPlaceholderText("VoxCPM2 package URL (optional)")
     txt_runtime_url = QLineEdit()
-    txt_runtime_url.setPlaceholderText("VoxCPM2 runtime package URL")
+    txt_runtime_url.setPlaceholderText("VoxCPM2 runtime package URL (optional)")
     gl.addWidget(txt_pkg_url)
     gl.addWidget(txt_runtime_url)
     layout.addWidget(gb_vox)
@@ -872,6 +878,16 @@ def _build_advanced_tab():
             path_fields['python_path'].setText(cfg.get('python_path', ''))
             txt_pkg_url.setText(cfg.get('package_url', ''))
             txt_runtime_url.setText(cfg.get('runtime_package_url', ''))
+
+            # Update live VoxCPM status label
+            try:
+                import voxcpm_support
+                st = voxcpm_support.get_voxcpm_install_status()
+                pkg_tag = f"✅ voxcpm package v{st.get('package_version')}" if st.get('has_package') else "❌ voxcpm package not installed"
+                model_tag = "✅ Model found" if st.get('model_path') else "❌ Model missing"
+                lbl_vox_status.setText(f"Status: {pkg_tag} | {model_tag} ({st.get('message', '')})")
+            except Exception as _st_err:
+                lbl_vox_status.setText(f"Status check error: {_st_err}")
         except Exception as e:
             print(f"[SETTINGS] Load VoxCPM2 paths: {e}")
 
@@ -899,22 +915,167 @@ def _build_advanced_tab():
     return _scrollable(page), load, save
 
 
+def _build_models_tab():
+    """Build the '📦 Models & Dependencies' tab. Returns (scroll_widget, load_fn, save_fn)."""
+    import settings_manager
+    from runtime_package_manager import (
+        load_runtime_package_manifest,
+        is_runtime_package_ready,
+        get_runtime_package_disk_usage,
+        uninstall_runtime_package,
+        _format_size,
+    )
+    from ui_download_dialog import PackageDownloadDialog
+    from PyQt5.QtWidgets import QMessageBox
+
+    page = QWidget()
+    layout = QVBoxLayout(page)
+    layout.setSpacing(14)
+    layout.setContentsMargins(16, 16, 16, 16)
+
+    # Info banner
+    gb_info = _make_group_box("📦 AI Models & Runtimes Manager")
+    gl_info = QVBoxLayout(gb_info)
+    gl_info.addWidget(_hint(
+        "Heavy AI model weights and multimedia tools are downloaded on demand to minimize "
+        "installer size. Downloaded assets are safely stored in your user application directory "
+        "and can be managed or deleted below to free disk space."
+    ))
+    layout.addWidget(gb_info)
+
+    # Auto download preference
+    chk_auto_prompt = QCheckBox("Prompt to download missing models automatically when needed")
+    chk_auto_prompt.setChecked(True)
+    layout.addWidget(chk_auto_prompt)
+
+    # Package cards
+    package_widgets = {}
+    manifest = load_runtime_package_manifest()
+    packages = manifest.get("packages", {})
+
+    for pkg_key, pkg_info in packages.items():
+        gb = _make_group_box(pkg_info.get("label", pkg_key))
+        gl = QVBoxLayout(gb)
+        gl.setSpacing(8)
+
+        desc = pkg_info.get("description", "")
+        approx = pkg_info.get("approx_size_mb", 0)
+        if desc:
+            gl.addWidget(_hint(f"{desc} (Approx. {approx} MB)"))
+
+        # Status badge row
+        h_status = QHBoxLayout()
+        lbl_status_icon = QLabel("●")
+        lbl_status_text = QLabel("Checking status...")
+        lbl_status_text.setStyleSheet("font-weight: bold;")
+        h_status.addWidget(lbl_status_icon)
+        h_status.addWidget(lbl_status_text)
+        h_status.addStretch()
+        gl.addLayout(h_status)
+
+        # Buttons
+        h_btns = QHBoxLayout()
+        btn_download = QPushButton("📥 Download / Update")
+        btn_download.setObjectName("secondaryBtn")
+        btn_download.setFixedWidth(160)
+
+        btn_delete = QPushButton("🗑 Delete (Free Space)")
+        btn_delete.setObjectName("secondaryBtn")
+        btn_delete.setFixedWidth(160)
+        btn_delete.setStyleSheet("color: #EF4444;")
+
+        h_btns.addWidget(btn_download)
+        h_btns.addWidget(btn_delete)
+        h_btns.addStretch()
+        gl.addLayout(h_btns)
+
+        layout.addWidget(gb)
+
+        package_widgets[pkg_key] = {
+            "status_icon": lbl_status_icon,
+            "status_text": lbl_status_text,
+            "btn_download": btn_download,
+            "btn_delete": btn_delete,
+            "key": pkg_key,
+        }
+
+    layout.addStretch()
+
+    def refresh_package_ui():
+        for key, w_dict in package_widgets.items():
+            ready = is_runtime_package_ready(key)
+            if ready:
+                usage = get_runtime_package_disk_usage(key)
+                usage_str = f" ({_format_size(usage)} on disk)" if usage > 0 else ""
+                w_dict["status_icon"].setStyleSheet("color: #10B981; font-size: 16px;")
+                w_dict["status_text"].setText(f"Installed & Ready{usage_str}")
+                w_dict["status_text"].setStyleSheet("color: #10B981; font-weight: bold;")
+                w_dict["btn_download"].setText("🔄 Re-download / Verify")
+                w_dict["btn_delete"].setEnabled(True)
+            else:
+                w_dict["status_icon"].setStyleSheet("color: #94A3B8; font-size: 16px;")
+                w_dict["status_text"].setText("Not Installed")
+                w_dict["status_text"].setStyleSheet("color: #94A3B8; font-weight: bold;")
+                w_dict["btn_download"].setText("📥 Download Now")
+                w_dict["btn_delete"].setEnabled(False)
+
+    for key, w_dict in package_widgets.items():
+        _key = key
+
+        def _make_download_handler(k):
+            def _handler(checked=False):
+                dlg = PackageDownloadDialog([k], parent=page)
+                dlg.start()
+                refresh_package_ui()
+            return _handler
+
+        def _make_delete_handler(k):
+            def _handler(checked=False):
+                reply = QMessageBox.question(
+                    page,
+                    "Delete Package",
+                    f"Are you sure you want to delete the installed files for this package to reclaim disk space?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No
+                )
+                if reply == QMessageBox.Yes:
+                    uninstall_runtime_package(k)
+                    refresh_package_ui()
+            return _handler
+
+        w_dict["btn_download"].clicked.connect(_make_download_handler(_key))
+        w_dict["btn_delete"].clicked.connect(_make_delete_handler(_key))
+
+    def load():
+        cfg = settings_manager.read_config()
+        chk_auto_prompt.setChecked(bool(cfg.get("auto_download_missing_models", True)))
+        refresh_package_ui()
+
+    def save():
+        settings_manager.write_config({
+            "auto_download_missing_models": chk_auto_prompt.isChecked(),
+        })
+
+    return _scrollable(page), load, save
+
+
 # ── Main Injection Entry Point ─────────────────────────────────────────────────
 
 def inject_extra_settings_tabs(dialog, tab_widget):
     """
-    Append the 5 extra settings tabs to the compiled Settings QTabWidget.
+    Append the 6 extra settings tabs to the compiled Settings QTabWidget.
 
     Called from _open_settings_dialog_enhanced() in core_app.py after the
     compiled dialog has been created and is visible.
     """
     try:
-        # Build all 5 new tabs
+        # Build all 6 new tabs
         w1, load1, save1 = _build_more_apis_tab()
         w2, load2, save2 = _build_translation_tab()
         w3, load3, save3 = _build_appearance_tab()
         w4, load4, save4 = _build_export_tab()
         w5, load5, save5 = _build_advanced_tab()
+        w6, load6, save6 = _build_models_tab()
 
         # Append to tab widget
         tab_widget.addTab(w1, "🔑 More APIs")
@@ -922,9 +1083,10 @@ def inject_extra_settings_tabs(dialog, tab_widget):
         tab_widget.addTab(w3, "🎨 Appearance")
         tab_widget.addTab(w4, "📤 Export")
         tab_widget.addTab(w5, "🔧 Advanced")
+        tab_widget.addTab(w6, "📦 Models & Dependencies")
 
         # Load current values into all new tabs
-        loaders = [load1, load2, load3, load4, load5]
+        loaders = [load1, load2, load3, load4, load5, load6]
         for loader in loaders:
             try:
                 loader()
@@ -949,7 +1111,7 @@ def inject_extra_settings_tabs(dialog, tab_widget):
                     break
 
         if save_btn is not None:
-            savers = [save1, save2, save3, save4, save5]
+            savers = [save1, save2, save3, save4, save5, save6]
 
             def _on_extended_save(checked=False):
                 for saver in savers:
@@ -969,7 +1131,7 @@ def inject_extra_settings_tabs(dialog, tab_widget):
         apply_settings_dialog_theme(dialog)
 
         print(
-            f"[SETTINGS] Injected 5 extra tabs. Total tabs: {tab_widget.count()}")
+            f"[SETTINGS] Injected 6 extra tabs. Total tabs: {tab_widget.count()}")
 
     except Exception as exc:
         import traceback

@@ -1,22 +1,63 @@
 {
   "packages": {
-    "ai_runtime": {
-      "label": "AI Runtime (Python + FunASR + Demucs)",
-      "archive_name": "ai_runtime.zip",
-      "local_path": "runtime_packages/ai_runtime.zip",
-      "url": ""
-    },
     "funasr_models": {
-      "label": "FunASR Models",
+      "label": "FunASR Speech-to-Text Models",
+      "description": "Offline speech recognition models (Paraformer Khmer/Chinese, FSMN-VAD, CT-Punctuation)",
       "archive_name": "funasr_models.zip",
       "local_path": "runtime_packages/funasr_models.zip",
-      "url": ""
+      "target_subfolder": "models/funasr_hf_cache",
+      "approx_size_mb": 850,
+      "sha256": "",
+      "url": "https://github.com/heng-dev/ai-dubber-assets/releases/download/v1.0.0/funasr_models.zip",
+      "mirrors": [
+        "https://huggingface.co/FunASR/paraformer-zh/resolve/main/model.pt"
+      ]
     },
     "demucs_models": {
-      "label": "Demucs Models",
+      "label": "Demucs Vocal Isolation Models",
+      "description": "High-quality deep learning audio separator (HTDemucs pretrained weights)",
       "archive_name": "demucs_models.zip",
       "local_path": "runtime_packages/demucs_models.zip",
-      "url": ""
+      "target_subfolder": "models/demucs",
+      "approx_size_mb": 1200,
+      "sha256": "",
+      "url": "https://github.com/heng-dev/ai-dubber-assets/releases/download/v1.0.0/demucs_models.zip",
+      "mirrors": []
+    },
+    "ffmpeg_binaries": {
+      "label": "FFmpeg Multimedia Engine",
+      "description": "Standalone FFmpeg and FFprobe binary utilities for media multiplexing",
+      "archive_name": "ffmpeg_binaries.zip",
+      "local_path": "runtime_packages/ffmpeg_binaries.zip",
+      "target_subfolder": "bin",
+      "approx_size_mb": 65,
+      "sha256": "",
+      "url": "https://github.com/heng-dev/ai-dubber-assets/releases/download/v1.0.0/ffmpeg_binaries.zip",
+      "mirrors": []
+    },
+    "ai_runtime": {
+      "label": "AI Isolated Runtime (Windows CUDA/CPU)",
+      "description": "Optional isolated Python environment for Demucs and offline models",
+      "archive_name": "ai_runtime.zip",
+      "local_path": "runtime_packages/ai_runtime.zip",
+      "target_subfolder": "_internal/data_venv",
+      "approx_size_mb": 1500,
+      "sha256": "",
+      "url": "",
+      "mirrors": []
+    },
+    "voxcpm_models": {
+      "label": "VoxCPM2 Speech Synthesis Models",
+      "description": "VoxCPM2 tokenizer-free TTS weights (openbmb/VoxCPM2)",
+      "archive_name": "voxcpm_models.zip",
+      "local_path": "runtime_packages/voxcpm_models.zip",
+      "target_subfolder": "models/openbmb__VoxCPM2",
+      "approx_size_mb": 4700,
+      "sha256": "",
+      "url": "",
+      "mirrors": [
+        "https://huggingface.co/openbmb/VoxCPM2"
+      ]
     }
   }
 }

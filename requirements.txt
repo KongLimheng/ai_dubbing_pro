@@ -12,7 +12,7 @@ soundfile>=0.12.1
 pydub>=0.25.1
 
 # Speech Recognition & Translation & Cloud TTS
-edge-tts>=6.1.9
+edge-tts>=7.3.1
 deep-translator>=1.11.4
 google-genai>=2.25.0
 requests>=2.31.0

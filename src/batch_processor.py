@@ -37,6 +37,9 @@ class BatchJobItem:
         self.srt_path = raw_job.get("srt_path", None)
         self.voice_id = raw_job.get(
             "voice_id", "km-KH-SreymomNeural") or "km-KH-SreymomNeural"
+        import voxcpm_support
+        self.tts_engine = str(raw_job.get(
+            "tts_engine", "VoxCPM" if voxcpm_support.is_voxcpm_voice(self.voice_id) else "EdgeTTS"))
         self.pitch = raw_job.get("pitch", "0") or "0"
         self.rate = raw_job.get("rate", "0%") or "0%"
         self.eco_enabled = bool(raw_job.get("eco_enabled", False))
@@ -255,6 +258,7 @@ class BatchParallelManager(QObject):
             "facebook_faststart": getattr(job, "facebook_faststart", True),
             "allow_upscale": getattr(job, "allow_upscale", False),
             "audio_bitrate": getattr(job, "audio_bitrate", "96k"),
+            "tts_engine": getattr(job, "tts_engine", "EdgeTTS"),
         }
 
         with open(spec_file, "w", encoding="utf-8") as f:

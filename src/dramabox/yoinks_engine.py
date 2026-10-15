@@ -439,14 +439,19 @@ class BinaryResolver:
 # ── Choice Builder ──────────────────────────────────────────────────────────
 
 def score_video_format(f: Dict[str, Any]) -> int:
-    """Score video format favoring higher bitrate, MP4 container, and AVC codec."""
+    """Score video format favoring H.264/AVC compatibility, MP4 container, and bitrate."""
     score = int(f.get("tbr") or 0)
     ext = (f.get("ext") or "").lower()
     if ext == "mp4":
         score += 10000
     vcodec = (f.get("vcodec") or "").lower()
     if vcodec.startswith("avc") or "h264" in vcodec:
-        score += 5000
+        score += 50000
+    elif vcodec.startswith("vp9") or "vp09" in vcodec:
+        score += 2000
+    elif vcodec.startswith("av01") or "av1" in vcodec:
+        # Heavily penalize AV1 due to lack of hardware decoding acceleration on many platforms/GPUs
+        score -= 50000
     return score
 
 
@@ -454,7 +459,7 @@ def build_choices(info: Any) -> List[DownloadChoice]:
     """
     Build dynamic quality choices from probed video formats.
     Includes resolution grouping, file size estimation, and Audio-Only MP3.
-    Matches Yoinks buildChoices.
+    Matches Yoinks buildChoices with universal H.264 priority.
     """
     if isinstance(info, dict):
         formats = info.get("formats") or []
@@ -498,7 +503,15 @@ def build_choices(info: Any) -> List[DownloadChoice]:
             label=f"{height}p · mp4{size_label}",
             args=[
                 "-f",
-                f"bv*[height={height}]+ba/b[height={height}]/bv*[height<={height}]+ba/b",
+                (
+                    f"bv*[height={height}][vcodec^=avc1]+ba[acodec^=mp4a]/"
+                    f"bv*[height={height}][vcodec^=h264]+ba/"
+                    f"bv*[height={height}][vcodec^=avc]+ba/"
+                    f"bv*[height={height}][vcodec!*=av01][vcodec!*=av1]+ba/"
+                    f"bv*[height={height}]+ba/b[height={height}]/"
+                    f"bv*[height<={height}][vcodec^=avc1]+ba/"
+                    f"bv*[height<={height}]+ba/b"
+                ),
                 "--merge-output-format",
                 "mp4",
             ],
@@ -511,7 +524,12 @@ def build_choices(info: Any) -> List[DownloadChoice]:
         choices.append(DownloadChoice(
             kind="video",
             label="best available · mp4",
-            args=["-f", "bv*+ba/b", "--merge-output-format", "mp4"],
+            args=[
+                "-f",
+                "bv*[vcodec^=avc1]+ba[acodec^=mp4a]/bv*[vcodec^=h264]+ba/bv*[vcodec!*=av01][vcodec!*=av1]+ba/bv*+ba/b",
+                "--merge-output-format",
+                "mp4",
+            ],
             height=1080,
             is_audio=False,
         ))
@@ -532,34 +550,74 @@ def build_choices(info: Any) -> List[DownloadChoice]:
 def build_playlist_choices() -> List[DownloadChoice]:
     """
     Standard choices for playlists where individual formats vary across videos.
-    Matches Yoinks buildPlaylistChoices.
+    Prioritizes universal H.264 video codec to prevent AV1 hardware decoding failures.
     """
     return [
         DownloadChoice(
             kind="video",
             label="best quality · mp4",
-            args=["-f", "bv*+ba/b", "--merge-output-format", "mp4"],
+            args=[
+                "-f",
+                (
+                    "bv*[vcodec^=avc1]+ba[acodec^=mp4a]/"
+                    "bv*[vcodec^=h264]+ba/"
+                    "bv*[vcodec!*=av01][vcodec!*=av1]+ba/"
+                    "bv*+ba/b"
+                ),
+                "--merge-output-format",
+                "mp4",
+            ],
             height=2160,
             is_audio=False,
         ),
         DownloadChoice(
             kind="video",
             label="1080p max · mp4",
-            args=["-f", "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b", "--merge-output-format", "mp4"],
+            args=[
+                "-f",
+                (
+                    "bv*[height<=1080][vcodec^=avc1]+ba[acodec^=mp4a]/"
+                    "bv*[height<=1080][vcodec^=h264]+ba/"
+                    "bv*[height<=1080][vcodec!*=av01][vcodec!*=av1]+ba/"
+                    "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b"
+                ),
+                "--merge-output-format",
+                "mp4",
+            ],
             height=1080,
             is_audio=False,
         ),
         DownloadChoice(
             kind="video",
             label="720p max · mp4",
-            args=["-f", "bv*[height<=720]+ba/b[height<=720]/bv*+ba/b", "--merge-output-format", "mp4"],
+            args=[
+                "-f",
+                (
+                    "bv*[height<=720][vcodec^=avc1]+ba[acodec^=mp4a]/"
+                    "bv*[height<=720][vcodec^=h264]+ba/"
+                    "bv*[height<=720][vcodec!*=av01][vcodec!*=av1]+ba/"
+                    "bv*[height<=720]+ba/b[height<=720]/bv*+ba/b"
+                ),
+                "--merge-output-format",
+                "mp4",
+            ],
             height=720,
             is_audio=False,
         ),
         DownloadChoice(
             kind="video",
             label="480p max · mp4",
-            args=["-f", "bv*[height<=480]+ba/b[height<=480]/bv*+ba/b", "--merge-output-format", "mp4"],
+            args=[
+                "-f",
+                (
+                    "bv*[height<=480][vcodec^=avc1]+ba[acodec^=mp4a]/"
+                    "bv*[height<=480][vcodec^=h264]+ba/"
+                    "bv*[height<=480][vcodec!*=av01][vcodec!*=av1]+ba/"
+                    "bv*[height<=480]+ba/b[height<=480]/bv*+ba/b"
+                ),
+                "--merge-output-format",
+                "mp4",
+            ],
             height=480,
             is_audio=False,
         ),
@@ -793,6 +851,70 @@ def clean_partials(destinations: Any):
             pass
 
 
+def probe_video_codec(filepath: str) -> str:
+    """Return video stream codec (e.g. 'h264', 'av1', 'vp9') or empty string."""
+    if not filepath or not os.path.isfile(filepath):
+        return ""
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        app_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        candidate = os.path.join(app_dir, "ffprobe.exe" if sys.platform == "win32" else "ffprobe")
+        if os.path.exists(candidate):
+            ffprobe = candidate
+    if ffprobe and (os.path.exists(ffprobe) or shutil.which(ffprobe)):
+        try:
+            cmd = [
+                ffprobe,
+                "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "stream=codec_name",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                filepath,
+            ]
+            flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=5, creationflags=flags)
+            if res.returncode == 0:
+                return res.stdout.strip().lower()
+        except Exception:
+            pass
+    return ""
+
+
+def convert_av1_to_h264(input_path: str, ffmpeg_bin: Optional[str] = None) -> str:
+    """
+    Transcode an AV1 video to universal H.264 (AVC) to ensure compatibility
+    with OpenCV and platforms lacking hardware AV1 decoding.
+    """
+    if not input_path or not os.path.isfile(input_path):
+        return input_path
+    ff = ffmpeg_bin or BinaryResolver.resolve_ffmpeg() or "ffmpeg"
+    tmp_out = f"{os.path.splitext(input_path)[0]}_h264_tmp.mp4"
+    try:
+        flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        cmd = [
+            ff, "-y", "-v", "error",
+            "-i", input_path,
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-crf", "18",
+            "-c:a", "copy",
+            tmp_out,
+        ]
+        res = subprocess.run(cmd, capture_output=True, timeout=300, creationflags=flags)
+        if res.returncode == 0 and os.path.isfile(tmp_out) and os.path.getsize(tmp_out) > 0:
+            os.replace(tmp_out, input_path)
+            return input_path
+    except Exception as e:
+        _log.warning("AV1 auto-transcode failed: %s", e)
+    finally:
+        if os.path.exists(tmp_out):
+            try:
+                os.remove(tmp_out)
+            except Exception:
+                pass
+    return input_path
+
+
 def execute_download(
     url: str,
     choice: DownloadChoice,
@@ -978,6 +1100,26 @@ def execute_download(
             clean_err = err_output.strip().splitlines()[-1] if err_output else f"Exit code {returncode}"
             raise RuntimeError(f"Download failed: {clean_err}")
 
+        # Check completed destination
+        final_file = None
+        if last_filepath and os.path.exists(last_filepath):
+            final_file = last_filepath
+        else:
+            for d in destinations:
+                if os.path.exists(d):
+                    final_file = d
+                    break
+
+        if final_file and not choice.is_audio:
+            codec = probe_video_codec(final_file)
+            if codec in ("av1", "av01"):
+                if progress_callback:
+                    progress_callback(DownloadProgress(
+                        percent=99.5,
+                        status_text="Transcoding AV1 to universal H.264 for hardware playback...",
+                    ))
+                convert_av1_to_h264(final_file, ffmpeg_bin=ffmpeg_binary)
+
         # Final progress 100%
         if progress_callback:
             progress_callback(DownloadProgress(
@@ -985,14 +1127,7 @@ def execute_download(
                 status_text="Download complete",
             ))
 
-        # Check completed destination
-        if last_filepath and os.path.exists(last_filepath):
-            return last_filepath
-        for d in destinations:
-            if os.path.exists(d):
-                return d
-
-        return output_dir
+        return final_file or output_dir
     except Exception:
         proc.kill()
         clean_partials(destinations)

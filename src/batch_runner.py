@@ -294,6 +294,12 @@ def run_job(spec):
     effective_voice_id = voice_id if (
         voice_id and voice_id != "__BATCH_USE_SRT_TAGS__") else default_fallback_voice
 
+    import voxcpm_support
+    is_vox_job = (
+        voxcpm_support.is_voxcpm_voice(effective_voice_id)
+        or str(spec.get("tts_engine", "")).strip().lower() == "voxcpm"
+    )
+
     logger.info("--- SEGMENT TABLE & ADAPTIVE SPEECH RATE ANALYSIS ---")
     for idx, seg in enumerate(segments):
         s_start = float(seg.get("start", 0.0))
@@ -364,6 +370,10 @@ def run_job(spec):
             f"Rate: {s_rate:5s} | Voice: {s_resolved_voice.split('-')[-1][:12]} | Text: '{preview}'"
         )
 
+    has_voxcpm_segment = is_vox_job or any(voxcpm_support.is_voxcpm_voice(r.get("voice")) for r in table_data)
+    if has_voxcpm_segment:
+        logger.info(f"[CONFIG] VoxCPM2 synthesis enabled for batch dubbing: primary voice='{effective_voice_id}'")
+
     # Step 3: Audio Analysis & Video Speed Sync (Parity with Single Video Export)
     video_to_use = video_path
     if auto_video_sync:
@@ -387,10 +397,10 @@ def run_job(spec):
 
         analysis_worker = SegmentAudioAnalysisWorker(
             rows_data=rows_data,
-            tts_mode="EdgeTTS",
+            tts_mode="VoxCPM" if has_voxcpm_segment else "EdgeTTS",
             temp_prefix="batch_speed_audio",
             locked_rate_str="",
-            skip_voxcpm_analysis_generation=False
+            skip_voxcpm_analysis_generation=True
         )
 
         analysis_result = [None]
@@ -516,7 +526,12 @@ def run_job(spec):
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
 
-    if remove_vocal:
+    if has_voxcpm_segment:
+        logger.progress(
+            30, f"Exporting {len(table_data)} clips with VoxCPM2 Local AI Voice ({effective_voice_id})...")
+        logger.info(
+            f"[CONFIG] VoxCPM2 Local AI synthesis active: Voice='{effective_voice_id}', Demucs={'ON' if remove_vocal else 'OFF'} (BG: {background_percent}%, AI: {ai_voice_percent}%), Sync={'ON' if fit_audio else 'OFF'}")
+    elif remove_vocal:
         logger.progress(
             30, f"Exporting with Demucs vocal removal (BG: {background_percent}% | Voice: {ai_voice_percent}%)...")
         logger.info(
