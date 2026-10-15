@@ -75,6 +75,28 @@ cp "$SCRIPT_DIR/debian/postinst" "$STAGING_DIR/DEBIAN/"
 cp "$SCRIPT_DIR/debian/postrm" "$STAGING_DIR/DEBIAN/"
 chmod 755 "$STAGING_DIR/DEBIAN/postinst" "$STAGING_DIR/DEBIAN/postrm"
 
+# Synchronize dynamic package metadata in control file
+DEB_ARCH="amd64"
+if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+    DEB_ARCH="arm64"
+elif [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "amd64" ]; then
+    DEB_ARCH="amd64"
+else
+    DEB_ARCH="$ARCH"
+fi
+
+sed -i "s/^Version:.*/Version: ${VERSION}/" "$STAGING_DIR/DEBIAN/control"
+sed -i "s/^Architecture:.*/Architecture: ${DEB_ARCH}/" "$STAGING_DIR/DEBIAN/control"
+
+INSTALLED_SIZE_KB=$(du -sk "$STAGING_DIR/opt" 2>/dev/null | cut -f1 || echo "")
+if [ -n "$INSTALLED_SIZE_KB" ]; then
+    if grep -q "^Installed-Size:" "$STAGING_DIR/DEBIAN/control"; then
+        sed -i "s/^Installed-Size:.*/Installed-Size: ${INSTALLED_SIZE_KB}/" "$STAGING_DIR/DEBIAN/control"
+    else
+        sed -i "/^Architecture:.*/a Installed-Size: ${INSTALLED_SIZE_KB}" "$STAGING_DIR/DEBIAN/control"
+    fi
+fi
+
 # Configure fast compression: default to -Zgzip -z6 (20x faster than xz, universal across all Debian/Ubuntu releases)
 # or -Zzstd -z3 if configured via DEB_COMPRESSION=zstd
 COMPRESSION_OPT="-Zgzip"
