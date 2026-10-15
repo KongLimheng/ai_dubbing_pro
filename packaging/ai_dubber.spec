@@ -35,6 +35,8 @@ datas = [
     (os.path.join(project_root, "config"), "config"),
     (os.path.join(project_root, "runtime_packages.json"), "."),
     (os.path.join(project_root, "data.json"), "."),
+    (src_dir, "src"),
+    (src_dir, "."),
 ]
 
 # Include compiled bytecode runtime modules in both root and src
@@ -45,11 +47,14 @@ for pyc_file in ["core_app.pyc", "ui_widgets.pyc", "workers.pyc"]:
         datas.append((pyc_path, "src"))
 
 hidden_imports = [
-    # Qt GUI
+    # Qt GUI & Media
     "PyQt5",
     "PyQt5.QtCore",
     "PyQt5.QtGui",
     "PyQt5.QtWidgets",
+    "PyQt5.QtMultimedia",
+    "PyQt5.QtMultimediaWidgets",
+    "PyQt5.QtNetwork",
     "PyQt5.sip",
     "qtawesome",
     # Media & Audio
@@ -66,6 +71,7 @@ hidden_imports = [
     "deep_translator",
     "edge_tts",
     "google.genai",
+    "google.generativeai",
     # Downloader Subsystem
     "yt_dlp",
     "dramabox",
@@ -81,6 +87,13 @@ hidden_imports = [
     "tqdm",
     "huggingface_hub",
 ]
+
+# Automatically bundle all local application modules in src
+for f in os.listdir(src_dir):
+    if f.endswith('.py') and f != '__init__.py':
+        mod_name = f[:-3]
+        if mod_name not in hidden_imports:
+            hidden_imports.append(mod_name)
 
 if sys.platform == "win32":
     hidden_imports.extend([

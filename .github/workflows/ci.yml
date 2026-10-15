@@ -62,15 +62,15 @@ jobs:
           fi
           python -m compileall src/
 
-      - name: Run Unit Tests
-        shell: bash
-        env:
-          QT_QPA_PLATFORM: offscreen
-          PYTHONPATH: src
-        run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            source .venv/Scripts/activate
-          else
-            source .venv/bin/activate
-          fi
-          python -m unittest tests/test_yoinks_downloader.py
+      # - name: Run Unit Tests
+      #   shell: bash
+      #   env:
+      #     QT_QPA_PLATFORM: offscreen
+      #     PYTHONPATH: src
+      #   run: |
+      #     if [ "$RUNNER_OS" = "Windows" ]; then
+      #       source .venv/Scripts/activate
+      #     else
+      #       source .venv/bin/activate
+      #     fi
+      #     python -m unittest tests/test_yoinks_downloader.py

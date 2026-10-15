@@ -54,9 +54,17 @@ cp -a "$APP_SOURCE_DIR/." "$STAGING_DIR/opt/ai-dubber-ultimate/"
 
 # Clean cache and temporary files from package payload
 find "$STAGING_DIR/opt/ai-dubber-ultimate" -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-find "$STAGING_DIR/opt/ai-dubber-ultimate" -name "*.pyc" -delete 2>/dev/null || true
-find "$STAGING_DIR/opt/ai-dubber-ultimate" -name "*.pyo" -delete 2>/dev/null || true
 find "$STAGING_DIR/opt/ai-dubber-ultimate" -name ".git*" -exec rm -rf {} + 2>/dev/null || true
+
+# Verify critical compiled bytecode runtime modules exist
+for pyc_file in "core_app.pyc" "ui_widgets.pyc" "workers.pyc"; do
+    if [ ! -f "$STAGING_DIR/opt/ai-dubber-ultimate/_internal/$pyc_file" ] && \
+       [ ! -f "$STAGING_DIR/opt/ai-dubber-ultimate/_internal/src/$pyc_file" ] && \
+       [ ! -f "$STAGING_DIR/opt/ai-dubber-ultimate/$pyc_file" ]; then
+        echo "ERROR: Critical runtime bytecode module '$pyc_file' is missing from staging layout!" >&2
+        exit 1
+    fi
+done
 
 # Ensure main binary is executable
 if [ -f "$STAGING_DIR/opt/ai-dubber-ultimate/AI_Dubber_Ultimate" ]; then
